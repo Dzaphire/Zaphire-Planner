@@ -19,81 +19,50 @@ input::placeholder,textarea::placeholder{color:#4A5568}
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const {useState,useEffect,useRef,useMemo}=React;
+const {useState,useEffect,useRef}=React;
 
 // ── Supabase ──
-const SUPABASE_URL = "https://ttdioqltjmgalnbkapzi.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR0ZGlvcWx0am1nYWxuYmthcHppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk4MzU1NjksImV4cCI6MjA5NTQxMTU2OX0.KW5DDiC2FUFMFG7BPH87aFp-alarJijx-aGiHwfUW_I";
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
-// ── Storage (Supabase-backed, with localStorage fallback) ──
-const SK={years:"sap-years",year:y=>`sap-summer-${y}`,activities:"sap-activities",settings:"sap-settings"};
+const SURL="https://ttdioqltjmgalnbkapzi.supabase.co";
+const SKEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR0ZGlvcWx0am1nYWxuYmthcHppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk4MzU1NjksImV4cCI6MjA5NTQxMTU2OX0.KW5DDiC2FUFMFG7BPH87aFp-alarJijx-aGiHwfUW_I";
+const sb=supabase.createClient(SURL,SKEY);
+const SK={years:"sap-years",year:y=>`sap-summer-${y}`,activities:"sap-activities",settings:"sap-settings",kids:"sap-kids"};
 const store={
-  get: async (k) => {
-    try {
-      const { data, error } = await sb.from("app_data").select("value").eq("key", k).single();
-      if (error || !data) return null;
-      return data.value;
-    } catch { return null; }
-  },
-  set: async (k, v) => {
-    try {
-      await sb.from("app_data").upsert({ key: k, value: v, updated_at: new Date().toISOString() });
-    } catch (e) { console.error("Save error:", e); }
-  },
+  get:async k=>{try{const{data,error}=await sb.from("app_data").select("value").eq("key",k).single();if(error||!data)return null;return data.value;}catch{return null;}},
+  set:async(k,v)=>{try{await sb.from("app_data").upsert({key:k,value:v,updated_at:new Date().toISOString()});}catch(e){console.error(e);}},
 };
 
 // ── Design tokens ──
-const C={
-  bg:"#0F1117",card:"#1A1D27",card2:"#222536",card3:"#161926",
-  border:"#2D3748",border2:"#374151",
-  text:"#E2E8F0",text2:"#94A3B8",text3:"#4A5568",
-  accent:"#6366F1",success:"#10B981",warning:"#F59E0B",danger:"#EF4444",
-};
+const C={bg:"#0F1117",card:"#1A1D27",card2:"#222536",card3:"#161926",border:"#2D3748",text:"#E2E8F0",text2:"#94A3B8",text3:"#4A5568",accent:"#6366F1",success:"#10B981",warning:"#F59E0B",danger:"#EF4444"};
 
-// ── Constants ──
-const KIDS=[
-  {key:"shay",      name:"Shay",     dob:"2017-12-01",initials:"SH",color:"#A78BFA",bg:"#2D1F4E",light:"#C4B5FD"},
-  {key:"christian", name:"Christian",dob:"2015-02-01",initials:"CH",color:"#38BDF8",bg:"#0C2340",light:"#7DD3FC"},
-  {key:"aurora",    name:"Aurora",   dob:"2015-02-01",initials:"AU",color:"#F472B6",bg:"#3D1535",light:"#F9A8D4"},
-  {key:"sadie",     name:"Sadie",    dob:"2023-07-01",initials:"SA",color:"#FBBF24",bg:"#3D2A05",light:"#FCD34D"},
+// ── Kids default ──
+const KIDS_DEF=[
+  {key:"shay",name:"Shay",dob:"2017-12-01",initials:"SH",color:"#A78BFA",bg:"#2D1F4E",grade:"2nd",school:"",allergies:"",medical:"",emergencyName:"",emergencyPhone:"",emergencyRelation:"",doctor:"",doctorPhone:"",insurance:"",insuranceId:"",notes:""},
+  {key:"christian",name:"Christian",dob:"2015-02-01",initials:"CH",color:"#38BDF8",bg:"#0C2340",grade:"5th",school:"",allergies:"",medical:"",emergencyName:"",emergencyPhone:"",emergencyRelation:"",doctor:"",doctorPhone:"",insurance:"",insuranceId:"",notes:""},
+  {key:"aurora",name:"Aurora",dob:"2015-02-01",initials:"AU",color:"#F472B6",bg:"#3D1535",grade:"5th",school:"",allergies:"",medical:"",emergencyName:"",emergencyPhone:"",emergencyRelation:"",doctor:"",doctorPhone:"",insurance:"",insuranceId:"",notes:""},
+  {key:"sadie",name:"Sadie",dob:"2023-07-01",initials:"SA",color:"#FBBF24",bg:"#3D2A05",grade:"Pre-K",school:"",allergies:"",medical:"",emergencyName:"",emergencyPhone:"",emergencyRelation:"",doctor:"",doctorPhone:"",insurance:"",insuranceId:"",notes:""},
 ];
+
 const DAYS=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
-const SPORT_COLORS={
-  "Track & Field":{bg:"#2D1A0A",txt:"#FB923C",border:"#7C3208"},
-  "Swimming":     {bg:"#0A1F35",txt:"#38BDF8",border:"#0C4A6E"},
-  "Golf":         {bg:"#0A2010",txt:"#4ADE80",border:"#14532D"},
-  "Gymnastics":   {bg:"#220A35",txt:"#C084FC",border:"#6B21A8"},
-  "Pickleball":   {bg:"#2D2005",txt:"#FCD34D",border:"#78350F"},
-  "Cooking":      {bg:"#2D0A0A",txt:"#FCA5A5",border:"#7F1D1D"},
-  "Soccer":       {bg:"#0A2D1A",txt:"#6EE7B7",border:"#065F46"},
-  "Tennis":       {bg:"#2D2A05",txt:"#FDE68A",border:"#78350F"},
-  "Dance":        {bg:"#2D0A1F",txt:"#F9A8D4",border:"#831843"},
-};
-const getSC=n=>SPORT_COLORS[n]||{bg:"#1A1D27",txt:"#94A3B8",border:"#374151"};
-const SUMMER_COLORS={
-  "JCC":                   {bg:"#0A1F35",txt:"#60A5FA",border:"#1E40AF"},
-  "Hudson Table":          {bg:"#2D1A05",txt:"#FCD34D",border:"#78350F"},
-  "Stamford Nature Center":{bg:"#0A2010",txt:"#4ADE80",border:"#14532D"},
-  "Twin Rinks":            {bg:"#1A0A2D",txt:"#C084FC",border:"#6B21A8"},
-  "Unscheduled":           {bg:"#1A1D27",txt:"#4A5568",border:"#2D3748"},
-};
-const getTC=n=>SUMMER_COLORS[n]||{bg:"#2D0A1A",txt:"#F472B6",border:"#831843"};
 const DEFAULT_SPORT_OPTIONS=["Track & Field","Swimming","Golf","Gymnastics","Pickleball","Cooking","Soccer","Tennis","Basketball","Dance","Other"];
+const SPORT_COLORS={"Track & Field":{bg:"#2D1A0A",txt:"#FB923C",border:"#7C3208"},"Swimming":{bg:"#0A1F35",txt:"#38BDF8",border:"#0C4A6E"},"Golf":{bg:"#0A2010",txt:"#4ADE80",border:"#14532D"},"Gymnastics":{bg:"#220A35",txt:"#C084FC",border:"#6B21A8"},"Pickleball":{bg:"#2D2005",txt:"#FCD34D",border:"#78350F"},"Cooking":{bg:"#2D0A0A",txt:"#FCA5A5",border:"#7F1D1D"},"Soccer":{bg:"#0A2D1A",txt:"#6EE7B7",border:"#065F46"},"Tennis":{bg:"#2D2A05",txt:"#FDE68A",border:"#78350F"},"Dance":{bg:"#2D0A1F",txt:"#F9A8D4",border:"#831843"}};
+const getSC=n=>SPORT_COLORS[n]||{bg:"#1A1D27",txt:"#94A3B8",border:"#374151"};
+const SUMMER_COLORS={"JCC":{bg:"#0A1F35",txt:"#60A5FA",border:"#1E40AF"},"Hudson Table":{bg:"#2D1A05",txt:"#FCD34D",border:"#78350F"},"Stamford Nature Center":{bg:"#0A2010",txt:"#4ADE80",border:"#14532D"},"Twin Rinks":{bg:"#1A0A2D",txt:"#C084FC",border:"#6B21A8"},"Unscheduled":{bg:"#1A1D27",txt:"#4A5568",border:"#2D3748"}};
+const getTC=n=>SUMMER_COLORS[n]||{bg:"#2D0A1A",txt:"#F472B6",border:"#831843"};
+const SPORT_ICON={"Track & Field":"🏃","Swimming":"🏊","Golf":"⛳","Gymnastics":"🤸","Pickleball":"🏓","Cooking":"👨‍🍳","Soccer":"⚽","Tennis":"🎾","Basketball":"🏀","Dance":"💃"};
 
 function ageAsOf(dob,ref){const b=new Date(dob),r=new Date(ref);let a=r.getFullYear()-b.getFullYear();const m=r.getMonth()-b.getMonth();if(m<0||(m===0&&r.getDate()<b.getDate()))a--;return a;}
 function fmtDate(d){if(!d)return"";try{return new Date(d+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});}catch{return d;}}
 function fmtMoney(n){return"$"+Number(n||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});}
 
 // ── Default data ──
-const DEF_SCHED_2026={
+const DEF_SCHED={
   shay:[{a:"JCC",note:"Tzofim | Foam party",cost:""},{a:"JCC",note:"Tzofim | Boat Trip",cost:""},{a:"JCC",note:"Tzofim | Beardsley Zoo",cost:""},{a:"Hudson Table",note:"Baking Techniques",cost:"$656.50"},{a:"JCC",note:"Tzofim | Medieval Times",cost:""},{a:"JCC",note:"Tzofim | Great Wolf Lodge",cost:""},{a:"JCC",note:"Tzofim | Lake Compounce",cost:""},{a:"Unscheduled",note:"",cost:""}],
   christian:[{a:"JCC",note:"Na'arim | Maritime Aquarium",cost:""},{a:"JCC",note:"Na'arim",cost:""},{a:"JCC",note:"Na'arim | Family Late Night",cost:""},{a:"JCC",note:"Na'arim | Color War",cost:""},{a:"JCC",note:"Na'arim | Medieval Times",cost:""},{a:"JCC",note:"Na'arim | Great Wolf Lodge",cost:""},{a:"Stamford Nature Center",note:"Vet School 101",cost:"$460.00"},{a:"Unscheduled",note:"",cost:""}],
   aurora:[{a:"Hudson Table",note:"Culinary Techniques",cost:"$650.00"},{a:"JCC",note:"Na'arim | Maritime Aquarium",cost:""},{a:"JCC",note:"Na'arim | Family Late Night",cost:""},{a:"Hudson Table",note:"Baking Techniques",cost:"$663.00"},{a:"JCC",note:"Na'arim | Medieval Times",cost:""},{a:"Stamford Nature Center",note:"Mythical Menagerie",cost:"$460.00"},{a:"JCC",note:"Na'arim | Lake Compounce",cost:""},{a:"Unscheduled",note:"",cost:""}],
   sadie:Array(8).fill(null).map(()=>({a:"Unscheduled",note:"",cost:""})),
 };
-const DEF_WEEKS_2026=[{n:1,label:"Week 1",dates:"June 22–26"},{n:2,label:"Week 2",dates:"June 29–July 3"},{n:3,label:"Week 3",dates:"July 6–10"},{n:4,label:"Week 4",dates:"July 13–17"},{n:5,label:"Week 5",dates:"July 20–24"},{n:6,label:"Week 6",dates:"July 27–31"},{n:7,label:"Week 7",dates:"Aug 3–7"},{n:8,label:"Week 8",dates:"Aug 10–14"}];
+const DEF_WEEKS=[{n:1,label:"Week 1",dates:"June 22–26"},{n:2,label:"Week 2",dates:"June 29–July 3"},{n:3,label:"Week 3",dates:"July 6–10"},{n:4,label:"Week 4",dates:"July 13–17"},{n:5,label:"Week 5",dates:"July 20–24"},{n:6,label:"Week 6",dates:"July 27–31"},{n:7,label:"Week 7",dates:"Aug 3–7"},{n:8,label:"Week 8",dates:"Aug 10–14"}];
 const DEF_PROVIDERS=[
   {id:"jcc",name:"JCC",url:"https://daycampsatthej.org",hours:"9am–4pm",location:"1035 Newfield Ave, Stamford CT",phone:"203.487.0994",notes:"Tzofim (Shay), Na'arim (Twins). Sibling discounts.",sessions:[{name:"Full summer",ageMin:5,ageMax:16,dates:"June 22–Aug 14",cost:null,costNote:"varies",description:"Full-day traditional day camp."}]},
   {id:"hudson",name:"Hudson Table",url:"https://hudsontable.com/stamford/kids-summer-classes/",hours:"10am–3pm",location:"44 John St, Stamford CT",phone:"",notes:"100% nut-free. Forms due June 15.",sessions:[{name:"Culinary Techniques",ageMin:8,ageMax:14,dates:"June 22–26",cost:650,costNote:"+ fee",description:"Sautéing, pasta, sauce-making."},{name:"Baking Techniques",ageMin:8,ageMax:14,dates:"July 13–17",cost:650,costNote:"+ fee",description:"Bread, pastries, desserts."}]},
@@ -112,12 +81,12 @@ const DEF_SPORTS=[
 ];
 
 // ── UI Primitives ──
-function F({label,children}){return <div style={{marginBottom:13}}><label style={{fontSize:12,fontWeight:500,color:C.text2,display:"block",marginBottom:5}}>{label}</label>{children}</div>;}
+function F({label,children}){return <div style={{marginBottom:12}}><label style={{fontSize:12,fontWeight:500,color:C.text2,display:"block",marginBottom:4}}>{label}</label>{children}</div>;}
 function Inp({value,onChange,placeholder,type="text"}){return <input type={type} value={value||""} onChange={e=>onChange(e.target.value)} placeholder={placeholder||""} style={{width:"100%",padding:"8px 12px",borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,background:C.card2,color:C.text}}/>;}
 function Sel({value,onChange,options}){return <select value={value} onChange={e=>onChange(e.target.value)} style={{width:"100%",padding:"8px 12px",borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,background:C.card2,color:C.text}}>{options.map(o=><option key={o.value||o} value={o.value||o}>{o.label||o}</option>)}</select>;}
-function Btn({onClick,children,variant="primary",small,full}){
-  const s={primary:{background:C.accent,color:"#fff",border:"none"},secondary:{background:C.card2,color:C.text,border:`1px solid ${C.border}`},danger:{background:"#2D0A0A",color:"#FCA5A5",border:"1px solid #7F1D1D"},ghost:{background:"transparent",color:C.text2,border:`1px solid ${C.border}`}};
-  return <button onClick={onClick} style={{...s[variant]||s.primary,padding:small?"4px 12px":"9px 18px",borderRadius:8,cursor:"pointer",fontSize:small?12:13,fontWeight:500,width:full?"100%":"auto"}}>{children}</button>;
+function Btn({onClick,children,variant="primary",small}){
+  const s={primary:{background:C.accent,color:"#fff",border:"none"},secondary:{background:C.card2,color:C.text,border:`1px solid ${C.border}`},danger:{background:"#2D0A0A",color:"#FCA5A5",border:"1px solid #7F1D1D"}};
+  return <button onClick={onClick} style={{...(s[variant]||s.primary),padding:small?"4px 12px":"9px 18px",borderRadius:8,cursor:"pointer",fontSize:small?12:13,fontWeight:500}}>{children}</button>;
 }
 function Modal({title,onClose,children,wide}){
   return(
@@ -132,15 +101,14 @@ function Modal({title,onClose,children,wide}){
     </div>
   );
 }
-
-function KidAvatar({kidKey,size=32}){
-  const k=KIDS.find(x=>x.key===kidKey)||KIDS[0];
-  return <div style={{width:size,height:size,borderRadius:"50%",background:k.bg,border:`2px solid ${k.color}`,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:size*0.35,color:k.color,flexShrink:0}}>{k.initials}</div>;
+function KidAvatar({kid,size=32}){
+  if(!kid)return null;
+  return <div style={{width:size,height:size,borderRadius:"50%",background:kid.bg,border:`2px solid ${kid.color}`,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:size*0.35,color:kid.color,flexShrink:0}}>{kid.initials}</div>;
 }
 function SportPill({name,small}){const c=getSC(name);return <span style={{background:c.bg,color:c.txt,border:`1px solid ${c.border}`,borderRadius:5,padding:small?"1px 7px":"3px 9px",fontSize:small?11:12,fontWeight:500,whiteSpace:"nowrap"}}>{name}</span>;}
-function KidPill({kidKey,small}){const k=KIDS.find(x=>x.key===kidKey)||KIDS[0];return <span style={{background:k.bg,color:k.color,borderRadius:5,padding:small?"1px 7px":"3px 9px",fontSize:small?11:12,fontWeight:500}}>{k.name}</span>;}
+function KidPill({kid,small}){if(!kid)return null;return <span style={{background:kid.bg,color:kid.color,borderRadius:5,padding:small?"1px 7px":"3px 9px",fontSize:small?11:12,fontWeight:500}}>{kid.name}</span>;}
 
-// ── Sport/Session/Meet Modals ──
+// ── Sport Modal ──
 function SportModal({sport,sportOptions,onSave,onClose}){
   const blank={id:Date.now()+"",name:"",otherName:"",kidKey:"christian",teamName:"",coach:"",location:"",phone:"",website:"",notes:"",sessions:[]};
   const [s,setS]=useState(sport?{...sport,otherName:sport.otherName||""}:blank);
@@ -148,8 +116,8 @@ function SportModal({sport,sportOptions,onSave,onClose}){
   return(
     <Modal title={sport?"Edit activity":"Add activity"} onClose={onClose} wide>
       <F label="Sport / Activity"><Sel value={s.name} onChange={v=>setS({...s,name:v})} options={sportOptions}/></F>
-      {isOther&&<F label="Specify activity"><Inp value={s.otherName} onChange={v=>setS({...s,otherName:v})} placeholder="e.g. Fencing…"/></F>}
-      <F label="Child"><Sel value={s.kidKey} onChange={v=>setS({...s,kidKey:v})} options={KIDS.map(k=>({value:k.key,label:k.name}))}/></F>
+      {isOther&&<F label="Specify"><Inp value={s.otherName} onChange={v=>setS({...s,otherName:v})} placeholder="e.g. Fencing…"/></F>}
+      <F label="Child"><Sel value={s.kidKey} onChange={v=>setS({...s,kidKey:v})} options={[{value:"shay",label:"Shay"},{value:"christian",label:"Christian"},{value:"aurora",label:"Aurora"},{value:"sadie",label:"Sadie"}]}/></F>
       <F label="Team / Program name"><Inp value={s.teamName} onChange={v=>setS({...s,teamName:v})}/></F>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
         <F label="Coach"><Inp value={s.coach} onChange={v=>setS({...s,coach:v})}/></F>
@@ -162,6 +130,7 @@ function SportModal({sport,sportOptions,onSave,onClose}){
     </Modal>
   );
 }
+
 function SessionModal({session,onSave,onClose}){
   const blank={id:Date.now()+"",name:"",start:"",end:"",cost:"",practiceDays:[],practiceTime:"",practiceLocation:"",enrolled:true,meets:[]};
   const [s,setS]=useState(session||blank);
@@ -192,14 +161,15 @@ function SessionModal({session,onSave,onClose}){
     </Modal>
   );
 }
-function MeetModal({meet,kidKey,onSave,onClose}){
+
+function MeetModal({meet,kidKey,onSave,onClose,kids}){
   const blank={id:Date.now()+"",dateStart:"",dateEnd:"",name:"",location:"",time:"",attending:true,results:[]};
   const [m,setM]=useState(meet?{...meet,dateStart:meet.dateStart||meet.date||"",dateEnd:meet.dateEnd||meet.date||""}:blank);
   const [results,setResults]=useState(meet?[...meet.results]:[]);
   const [showR,setShowR]=useState(false);
   const [nr,setNr]=useState({kidKey:kidKey||"christian",event:"",time:"",place:"",notes:""});
   return(
-    <Modal title={meet?"Edit meet":"Add meet / event"} onClose={onClose} wide>
+    <Modal title={meet?"Edit meet":"Add meet"} onClose={onClose} wide>
       <F label="Event name"><Inp value={m.name} onChange={v=>setM({...m,name:v})} placeholder="e.g. FCIAC Championships"/></F>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
         <F label="Start date"><Inp type="date" value={m.dateStart} onChange={v=>setM({...m,dateStart:v})}/></F>
@@ -217,14 +187,14 @@ function MeetModal({meet,kidKey,onSave,onClose}){
       <div style={{fontWeight:500,fontSize:13,color:C.text,marginBottom:8}}>Results</div>
       {results.map((r,ri)=>(
         <div key={ri} style={{background:C.card2,borderRadius:8,padding:"7px 12px",marginBottom:6,display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:12}}>
-          <span style={{color:C.text}}><KidPill kidKey={r.kidKey} small/> <b>{r.event}</b> — {r.time} · {r.place}{r.notes?` · ${r.notes}`:""}</span>
+          <span style={{color:C.text}}>{r.event} — {r.time} · {r.place}{r.notes?` · ${r.notes}`:""}</span>
           <button onClick={()=>setResults(results.filter((_,i)=>i!==ri))} style={{background:"none",border:"none",cursor:"pointer",color:C.danger,fontSize:14,marginLeft:8}}>×</button>
         </div>
       ))}
       {showR?(
         <div style={{background:"#0C2340",borderRadius:8,padding:12,marginBottom:10,border:`1px solid ${C.border}`}}>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
-            <F label="Athlete"><Sel value={nr.kidKey} onChange={v=>setNr({...nr,kidKey:v})} options={KIDS.map(k=>({value:k.key,label:k.name}))}/></F>
+            <F label="Athlete"><Sel value={nr.kidKey} onChange={v=>setNr({...nr,kidKey:v})} options={kids.map(k=>({value:k.key,label:k.name}))}/></F>
             <F label="Event"><Inp value={nr.event} onChange={v=>setNr({...nr,event:v})} placeholder="400m"/></F>
             <F label="Time / Score"><Inp value={nr.time} onChange={v=>setNr({...nr,time:v})} placeholder="62.4s"/></F>
             <F label="Place"><Inp value={nr.place} onChange={v=>setNr({...nr,place:v})} placeholder="1st"/></F>
@@ -243,8 +213,37 @@ function MeetModal({meet,kidKey,onSave,onClose}){
   );
 }
 
+// ── Kid Edit Modal ──
+function KidEditModal({kid,onSave,onClose}){
+  const [k,setK]=useState({...kid});
+  const sections=[
+    {title:"Basic info",fields:[["name","Name"],["dob","Date of birth","date"],["grade","Grade"],["school","School"]]},
+    {title:"Medical",fields:[["allergies","Allergies"],["medical","Medical notes"]]},
+    {title:"Emergency contact",fields:[["emergencyName","Contact name"],["emergencyPhone","Contact phone"],["emergencyRelation","Relationship"]]},
+    {title:"Doctor & Insurance",fields:[["doctor","Doctor name"],["doctorPhone","Doctor phone"],["insurance","Insurance provider"],["insuranceId","Insurance ID"]]},
+  ];
+  return(
+    <Modal title={`Edit — ${kid.name}`} onClose={onClose} wide>
+      {sections.map(sec=>(
+        <div key={sec.title} style={{marginBottom:16}}>
+          <div style={{fontSize:11,fontWeight:600,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10}}>{sec.title}</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            {sec.fields.map(([key,label,type])=>(
+              <F key={key} label={label}><Inp type={type||"text"} value={k[key]||""} onChange={v=>setK({...k,[key]:v})}/></F>
+            ))}
+          </div>
+        </div>
+      ))}
+      <F label="Profile notes">
+        <textarea value={k.notes||""} onChange={e=>setK({...k,notes:e.target.value})} rows={3} style={{width:"100%",padding:"8px 12px",borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,background:C.card2,color:C.text,resize:"vertical"}}/>
+      </F>
+      <div style={{display:"flex",gap:10,marginTop:10}}><Btn onClick={onClose} variant="secondary">Cancel</Btn><Btn onClick={()=>onSave(k)}>Save</Btn></div>
+    </Modal>
+  );
+}
+
 // ── Calendar ──
-function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClick}){
+function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClick,kids}){
   const today=new Date();
   const [viewMode,setViewMode]=useState("month");
   const [curDate,setCurDate]=useState(new Date(2026,5,1));
@@ -272,7 +271,7 @@ function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClic
   }
   if(showSummer&&summerData){
     summerData.weeks.forEach((wk,wi)=>{
-      KIDS.forEach(k=>{
+      kids.forEach(k=>{
         const s=summerData.schedule[k.key]?.[wi];
         if(!s||s.a==="Unscheduled")return;
         const c=getTC(s.a);
@@ -284,12 +283,7 @@ function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClic
   const evOn=d=>events.filter(e=>e.date===d);
   const icon=t=>t==="meet"?"★":t==="practice"?"▸":"☀";
 
-  function VToggle(){
-    return <div style={{display:"flex",gap:4}}>{["day","week","month"].map(v=><button key={v} onClick={()=>setViewMode(v)} style={{padding:"5px 12px",borderRadius:7,border:`1px solid ${viewMode===v?C.accent:C.border}`,background:viewMode===v?C.accent:C.card2,color:viewMode===v?"#fff":C.text2,cursor:"pointer",fontSize:12,textTransform:"capitalize"}}>{v}</button>)}</div>;
-  }
-  function EPill({ev,compact}){
-    return <div onClick={()=>onEventClick(ev)} title={ev.label} style={{background:ev.bg,color:ev.color,border:`1px solid ${ev.border}`,borderRadius:4,padding:compact?"1px 4px":"3px 7px",fontSize:compact?10:11,fontWeight:500,marginBottom:2,cursor:"pointer",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",opacity:ev.notAttending?0.4:1}}>{icon(ev.type)} {ev.label}</div>;
-  }
+  function VToggle(){return <div style={{display:"flex",gap:4}}>{["day","week","month"].map(v=><button key={v} onClick={()=>setViewMode(v)} style={{padding:"5px 12px",borderRadius:7,border:`1px solid ${viewMode===v?C.accent:C.border}`,background:viewMode===v?C.accent:C.card2,color:viewMode===v?"#fff":C.text2,cursor:"pointer",fontSize:12,textTransform:"capitalize"}}>{v}</button>)}</div>;}
 
   if(viewMode==="month"){
     const yr=curDate.getFullYear(),mo=curDate.getMonth();
@@ -318,7 +312,7 @@ function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClic
               return(
                 <div key={i} style={{minHeight:80,background:isToday?"#0F1D35":C.card,borderRight:i%7<6?`1px solid ${C.border}`:"none",borderTop:`1px solid ${C.border}`,padding:"3px 4px"}}>
                   <div onClick={()=>{setCurDate(new Date(yr,mo,d));setViewMode("day");}} style={{fontSize:12,fontWeight:isToday?700:400,display:"inline-flex",alignItems:"center",justifyContent:"center",width:22,height:22,borderRadius:"50%",background:isToday?C.accent:"transparent",color:isToday?"#fff":C.text3,marginBottom:2,cursor:"pointer"}}>{d}</div>
-                  {evs.slice(0,3).map((e,ei)=><EPill key={ei} ev={e} compact/>)}
+                  {evs.slice(0,3).map((e,ei)=><div key={ei} onClick={()=>onEventClick(e)} title={e.label} style={{background:e.bg,color:e.color,border:`1px solid ${e.border}`,borderRadius:4,padding:"1px 4px",fontSize:10,fontWeight:500,marginBottom:2,cursor:"pointer",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",opacity:e.notAttending?0.4:1}}>{icon(e.type)} {e.label}</div>)}
                   {evs.length>3&&<div style={{fontSize:9,color:C.text3,cursor:"pointer"}} onClick={()=>{setCurDate(new Date(yr,mo,d));setViewMode("day");}}>+{evs.length-3} more</div>}
                 </div>
               );
@@ -349,7 +343,7 @@ function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClic
                 <div onClick={()=>{setCurDate(wd);setViewMode("day");}} style={{fontSize:11,fontWeight:600,color:isToday?"#fff":C.text2,marginBottom:4,cursor:"pointer",display:"inline-flex",flexDirection:"column",alignItems:"center",background:isToday?C.accent:"transparent",borderRadius:6,padding:isToday?"2px 6px":"0"}}>
                   <span style={{fontSize:10}}>{DAYS[i]}</span><span style={{fontSize:14}}>{wd.getDate()}</span>
                 </div>
-                {evs.map((e,ei)=><div key={ei} onClick={()=>onEventClick(e)} style={{background:e.bg,color:e.color,border:`1px solid ${e.border}`,borderRadius:4,padding:"3px 5px",fontSize:10,fontWeight:500,marginBottom:2,cursor:"pointer",lineHeight:1.3}}>{icon(e.type)} {e.label}{e.sub&&<div style={{fontSize:9,opacity:0.75}}>{e.sub}</div>}</div>)}
+                {evs.map((e,ei)=><div key={ei} onClick={()=>onEventClick(e)} style={{background:e.bg,color:e.color,border:`1px solid ${e.border}`,borderRadius:4,padding:"3px 5px",fontSize:10,fontWeight:500,marginBottom:2,cursor:"pointer",lineHeight:1.3}}>{icon(e.type)} {e.label}</div>)}
               </div>
             );
           })}
@@ -370,12 +364,12 @@ function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClic
       </div>
       {evs.length===0&&<div style={{textAlign:"center",padding:"40px 20px",color:C.text3,fontSize:13}}>Nothing scheduled this day.</div>}
       {evs.map((e,i)=>{
-        const kid=KIDS.find(k=>k.key===e.kidKey);
+        const kid=kids.find(k=>k.key===e.kidKey);
         return(
           <div key={i} onClick={()=>onEventClick(e)} style={{background:e.bg,border:`1px solid ${e.border}`,borderLeft:`4px solid ${e.color}`,borderRadius:10,padding:"14px 16px",marginBottom:10,cursor:"pointer"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-              <div><div style={{fontWeight:600,fontSize:14,color:e.color,marginBottom:3}}>{icon(e.type)} {e.label}</div>{e.sub&&<div style={{fontSize:12,color:C.text2}}>{e.sub}</div>}{e.notAttending&&<div style={{fontSize:12,color:C.warning,marginTop:3}}>Conflict — attending another event</div>}</div>
-              {kid&&<KidPill kidKey={e.kidKey}/>}
+              <div><div style={{fontWeight:600,fontSize:14,color:e.color,marginBottom:3}}>{icon(e.type)} {e.label}</div>{e.sub&&<div style={{fontSize:12,color:C.text2}}>{e.sub}</div>}</div>
+              {kid&&<KidPill kid={kid}/>}
             </div>
             <div style={{fontSize:11,color:C.text3,marginTop:8}}>Tap to edit →</div>
           </div>
@@ -385,11 +379,157 @@ function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClic
   );
 }
 
-// ── Dashboard ──
-function Dashboard({sports,summerData,conflicts,onNavigate}){
+// ── Kid Profile Page ──
+function KidProfilePage({kidKey,kids,sports,yearData,years,onBack}){
+  const [tab,setTab]=useState("activities");
+  const [journalEntry,setJournalEntry]=useState("");
+  const [savedNotes,setSavedNotes]=useState([]);
+  const kid=kids.find(k=>k.key===kidKey);
+  if(!kid)return null;
+  const age=ageAsOf(kid.dob,"2026-06-22");
+  const kidSports=sports.filter(s=>s.kidKey===kidKey);
+  const allSessions=kidSports.flatMap(sp=>sp.sessions.map(s=>({...s,sportName:sp.name,teamName:sp.teamName})));
+  const totalSpend=allSessions.filter(s=>s.enrolled).reduce((sum,s)=>sum+Number(s.cost||0),0);
+  const allResults=kidSports.flatMap(sp=>sp.sessions.flatMap(sess=>sess.meets.filter(m=>m.results.some(r=>r.kidKey===kidKey)).map(m=>({...m,sportName:sp.name,sessName:sess.name,results:m.results.filter(r=>r.kidKey===kidKey)}))));
+  const TABS=[{k:"activities",l:"Activities"},{k:"results",l:"Results"},{k:"finances",l:"Finances"},{k:"summer",l:"Summer"},{k:"notes",l:"Notes"}];
   const today=new Date();
+  return(
+    <div>
+      <button onClick={onBack} style={{background:"none",border:"none",cursor:"pointer",color:C.accent,fontSize:13,padding:0,marginBottom:18}}>‹ Back to Kids</button>
+      <div style={{background:kid.bg,border:`1.5px solid ${kid.color}44`,borderRadius:16,padding:"22px 24px",marginBottom:20,display:"flex",alignItems:"flex-start",gap:20}}>
+        <div style={{width:72,height:72,borderRadius:"50%",background:`${kid.color}22`,border:`3px solid ${kid.color}`,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:26,color:kid.color,flexShrink:0}}>{kid.initials}</div>
+        <div style={{flex:1}}>
+          <div style={{fontSize:24,fontWeight:700,color:kid.color,marginBottom:4}}>{kid.name}</div>
+          <div style={{display:"flex",gap:16,flexWrap:"wrap",fontSize:13,color:"#94A3B8",marginBottom:8}}>
+            <span>Age {age}</span>{kid.grade&&<span>· {kid.grade} grade</span>}{kid.school&&<span>· {kid.school}</span>}
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:8,marginTop:10}}>
+            <div style={{background:"rgba(0,0,0,0.2)",borderRadius:8,padding:"8px 12px"}}><div style={{fontSize:10,color:"#64748B",marginBottom:2}}>Active sports</div><div style={{fontSize:16,fontWeight:700,color:kid.color}}>{kidSports.filter(s=>s.sessions.some(x=>x.enrolled)).length}</div></div>
+            <div style={{background:"rgba(0,0,0,0.2)",borderRadius:8,padding:"8px 12px"}}><div style={{fontSize:10,color:"#64748B",marginBottom:2}}>Total meets</div><div style={{fontSize:16,fontWeight:700,color:kid.color}}>{kidSports.reduce((n,s)=>n+s.sessions.reduce((m,x)=>m+x.meets.length,0),0)}</div></div>
+            <div style={{background:"rgba(0,0,0,0.2)",borderRadius:8,padding:"8px 12px"}}><div style={{fontSize:10,color:"#64748B",marginBottom:2}}>Spend</div><div style={{fontSize:16,fontWeight:700,color:kid.color}}>{fmtMoney(totalSpend)}</div></div>
+            {kid.allergies&&<div style={{background:"rgba(239,68,68,0.15)",border:"1px solid rgba(239,68,68,0.3)",borderRadius:8,padding:"8px 12px"}}><div style={{fontSize:10,color:"#FCA5A5",marginBottom:2}}>⚠ Allergies</div><div style={{fontSize:12,color:"#FCA5A5"}}>{kid.allergies}</div></div>}
+          </div>
+        </div>
+      </div>
+      <div style={{display:"flex",gap:5,marginBottom:18,flexWrap:"wrap"}}>
+        {TABS.map(t=><button key={t.k} onClick={()=>setTab(t.k)} style={{padding:"7px 16px",borderRadius:8,border:`1px solid ${tab===t.k?kid.color:C.border}`,background:tab===t.k?kid.bg:C.card2,color:tab===t.k?kid.color:C.text2,cursor:"pointer",fontSize:13,fontWeight:tab===t.k?600:400}}>{t.l}</button>)}
+      </div>
+      {tab==="activities"&&(
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:12}}>
+          {kidSports.length===0&&<div style={{color:C.text3,fontSize:13,padding:"30px",textAlign:"center",gridColumn:"1/-1"}}>No activities yet.</div>}
+          {kidSports.map(sp=>{
+            const sc=getSC(sp.name);
+            const isActive=sp.sessions.some(s=>s.enrolled);
+            const icon2=SPORT_ICON[sp.name]||"🎯";
+            return(
+              <div key={sp.id} style={{background:isActive?sc.bg:C.card2,border:`1.5px solid ${isActive?sc.border:C.border}`,borderRadius:12,padding:16,opacity:isActive?1:0.6}}>
+                <div style={{fontSize:28,marginBottom:8}}>{icon2}</div>
+                <div style={{fontWeight:700,fontSize:14,color:isActive?sc.txt:C.text2,marginBottom:3}}>{sp.name}</div>
+                <div style={{fontSize:12,color:"#64748B",marginBottom:8}}>{sp.teamName}</div>
+                {sp.sessions.map(sess=>{const isPast=sess.end&&new Date(sess.end+"T12:00:00")<today;return(<div key={sess.id} style={{background:"rgba(0,0,0,0.2)",borderRadius:6,padding:"5px 8px",marginBottom:4}}><div style={{fontSize:11,color:isPast?C.text3:sc.txt,fontWeight:500}}>{sess.name}</div><div style={{fontSize:10,color:"#4A5568"}}>{isPast?"Past":sess.enrolled?"Active":"Reference"} · {sess.practiceDays.join(", ")}</div></div>);})}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {tab==="results"&&(
+        <div>
+          {allResults.length===0&&<div style={{textAlign:"center",padding:"40px",color:C.text3,fontSize:13}}>No results yet.</div>}
+          {allResults.map((m,i)=>{const isMulti=m.dateEnd&&m.dateEnd!==m.dateStart;return(
+            <div key={i} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"12px 16px",marginBottom:10}}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}><div><div style={{fontWeight:600,fontSize:14,color:C.text}}>★ {m.name}</div><div style={{fontSize:12,color:C.text2}}>{isMulti?`${fmtDate(m.dateStart)} – ${fmtDate(m.dateEnd)}`:(m.dateStart||m.date)} · {m.location}</div></div><SportPill name={m.sportName}/></div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{m.results.map((r,ri)=><div key={ri} style={{background:"#0C2340",border:"1px solid #1E40AF",borderRadius:7,padding:"7px 12px",fontSize:12}}><div style={{fontWeight:600,color:"#38BDF8"}}>{r.event}</div><div style={{color:"#E2E8F0"}}>{r.time} · <b>{r.place}</b></div>{r.notes&&<div style={{fontSize:11,color:"#64748B"}}>{r.notes}</div>}</div>)}</div>
+            </div>
+          );})}
+        </div>
+      )}
+      {tab==="finances"&&(
+        <div>
+          <div style={{background:"#1E1B4B",borderRadius:12,padding:"16px 20px",marginBottom:16,border:"1px solid #4338CA"}}><div style={{fontSize:12,color:"#A5B4FC",marginBottom:4}}>Total — {kid.name}</div><div style={{fontSize:28,fontWeight:700,color:"#fff"}}>{fmtMoney(totalSpend)}</div></div>
+          {kidSports.filter(sp=>sp.sessions.some(s=>s.enrolled&&s.cost)).map(sp=>{const sc=getSC(sp.name);const spTotal=sp.sessions.filter(s=>s.enrolled).reduce((sum,s)=>sum+Number(s.cost||0),0);return(
+            <div key={sp.id} style={{background:C.card,border:`1px solid ${sc.border}`,borderLeft:`4px solid ${sc.txt}`,borderRadius:12,overflow:"hidden",marginBottom:10}}>
+              <div style={{background:sc.bg,padding:"10px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}><SportPill name={sp.name}/><span style={{fontWeight:700,color:"#E2E8F0",fontSize:15}}>{fmtMoney(spTotal)}</span></div>
+              {sp.sessions.filter(s=>s.enrolled&&s.cost).map((sess,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",padding:"10px 14px",borderBottom:`1px solid ${C.border}`,background:C.card}}><div><div style={{fontSize:13,color:C.text,fontWeight:500}}>{sess.name}</div><div style={{fontSize:11,color:C.text3}}>{sess.start} → {sess.end}</div></div><span style={{fontWeight:600,color:C.text}}>{fmtMoney(sess.cost)}</span></div>)}
+            </div>
+          );})}
+        </div>
+      )}
+      {tab==="summer"&&(
+        <div>
+          {years.map(y=>{const yd=yearData[y];if(!yd)return null;const kidSched=yd.schedule[kidKey]||[];return(
+            <div key={y} style={{marginBottom:20}}>
+              <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:10}}>Summer {y}</div>
+              <div style={{borderRadius:12,overflow:"hidden",border:`1px solid ${C.border}`}}>
+                {yd.weeks.map((wk,wi)=>{const s=kidSched[wi]||{a:"Unscheduled",note:"",cost:""};const c=getTC(s.a);return(
+                  <div key={wi} style={{display:"grid",gridTemplateColumns:"90px 1fr 1fr auto",alignItems:"center",gap:10,padding:"9px 14px",background:wi%2===0?C.card:C.card2,borderBottom:wi<yd.weeks.length-1?`1px solid ${C.border}`:"none"}}>
+                    <div><div style={{fontWeight:500,fontSize:12,color:C.text}}>{wk.label}</div><div style={{fontSize:10,color:C.text3}}>{wk.dates}</div></div>
+                    <span style={{background:c.bg,color:c.txt,border:`1px solid ${c.border}`,borderRadius:5,padding:"2px 8px",fontSize:11,fontWeight:500}}>{s.a}</span>
+                    <div style={{fontSize:11,color:C.text2}}>{s.note||"—"}</div>
+                    <div style={{fontSize:12,fontWeight:600,color:"#4ADE80"}}>{s.cost}</div>
+                  </div>
+                );})}
+              </div>
+            </div>
+          );})}
+        </div>
+      )}
+      {tab==="notes"&&(
+        <div>
+          {kid.notes&&<div style={{background:kid.bg,border:`1px solid ${kid.color}44`,borderRadius:10,padding:"12px 16px",marginBottom:14}}><div style={{fontSize:11,fontWeight:600,color:kid.color,marginBottom:6,textTransform:"uppercase",letterSpacing:"0.05em"}}>Profile notes</div><div style={{fontSize:13,color:C.text,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{kid.notes}</div></div>}
+          <F label="Add journal entry"><textarea value={journalEntry} onChange={e=>setJournalEntry(e.target.value)} rows={4} placeholder={`Notes about ${kid.name}…`} style={{width:"100%",padding:"10px 12px",borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,background:C.card2,color:C.text,resize:"vertical"}}/></F>
+          <Btn onClick={()=>{if(!journalEntry.trim())return;setSavedNotes([{date:new Date().toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}),text:journalEntry.trim()},...savedNotes]);setJournalEntry("");}} small>Save entry</Btn>
+          {savedNotes.map((n,i)=><div key={i} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 14px",marginBottom:8,marginTop:i===0?14:0}}><div style={{fontSize:11,color:C.text3,marginBottom:4}}>{n.date}</div><div style={{fontSize:13,color:C.text,lineHeight:1.6,whiteSpace:"pre-wrap"}}>{n.text}</div></div>)}
+        </div>
+      )}
+      {(kid.emergencyName||kid.doctor||kid.insurance)&&(
+        <div style={{marginTop:24,background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 18px"}}>
+          <div style={{fontSize:12,fontWeight:600,color:C.text3,textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:12}}>Quick reference</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:12}}>
+            {kid.emergencyName&&<div><div style={{fontSize:11,color:C.text3,marginBottom:3}}>Emergency contact</div><div style={{fontSize:13,color:C.text,fontWeight:500}}>{kid.emergencyName}</div><div style={{fontSize:12,color:C.text2}}>{kid.emergencyPhone}{kid.emergencyRelation?` · ${kid.emergencyRelation}`:""}</div></div>}
+            {kid.doctor&&<div><div style={{fontSize:11,color:C.text3,marginBottom:3}}>Doctor</div><div style={{fontSize:13,color:C.text,fontWeight:500}}>{kid.doctor}</div><div style={{fontSize:12,color:C.text2}}>{kid.doctorPhone}</div></div>}
+            {kid.insurance&&<div><div style={{fontSize:11,color:C.text3,marginBottom:3}}>Insurance</div><div style={{fontSize:13,color:C.text,fontWeight:500}}>{kid.insurance}</div><div style={{fontSize:12,color:C.text2}}>{kid.insuranceId}</div></div>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
-  // Upcoming meets within 60 days
+// ── Kids Directory ──
+function KidsDirectoryPage({kids,sports,onSelectKid,onBack}){
+  return(
+    <div>
+      <button onClick={onBack} style={{background:"none",border:"none",cursor:"pointer",color:C.accent,fontSize:13,padding:0,marginBottom:18}}>‹ Back to Home</button>
+      <div style={{fontSize:22,fontWeight:700,color:C.text,marginBottom:4}}>👨‍👩‍👧‍👦 Kids</div>
+      <div style={{fontSize:13,color:C.text2,marginBottom:20}}>Tap a child to view their full profile</div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:14}}>
+        {kids.map(kid=>{
+          const age=ageAsOf(kid.dob,"2026-06-22");
+          const kidSports=sports.filter(s=>s.kidKey===kid.key&&s.sessions.some(x=>x.enrolled));
+          const sportNames=[...new Set(kidSports.map(s=>s.name))];
+          const total=sports.filter(s=>s.kidKey===kid.key).flatMap(s=>s.sessions).filter(s=>s.enrolled).reduce((sum,s)=>sum+Number(s.cost||0),0);
+          return(
+            <div key={kid.key} onClick={()=>onSelectKid(kid.key)}
+              style={{background:kid.bg,border:`1.5px solid ${kid.color}44`,borderRadius:16,padding:"20px",cursor:"pointer",transition:"transform 0.15s,border-color 0.15s"}}
+              onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.borderColor=kid.color;}}
+              onMouseLeave={e=>{e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.borderColor=`${kid.color}44`;}}>
+              <div style={{width:56,height:56,borderRadius:"50%",background:`${kid.color}22`,border:`2.5px solid ${kid.color}`,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:20,color:kid.color,marginBottom:14}}>{kid.initials}</div>
+              <div style={{fontSize:18,fontWeight:700,color:kid.color,marginBottom:2}}>{kid.name}</div>
+              <div style={{fontSize:12,color:"#94A3B8",marginBottom:10}}>Age {age}{kid.grade?` · ${kid.grade} grade`:""}{kid.school?` · ${kid.school}`:""}</div>
+              {sportNames.length>0&&<div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:8}}>{sportNames.map(s=><SportPill key={s} name={s} small/>)}</div>}
+              {total>0&&<div style={{fontSize:12,color:"#64748B",marginTop:6}}>Spend: <span style={{color:kid.color,fontWeight:600}}>{fmtMoney(total)}</span></div>}
+              {kid.allergies&&<div style={{fontSize:11,color:"#FCA5A5",marginTop:6}}>⚠ {kid.allergies}</div>}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Dashboard ──
+function Dashboard({sports,summerData,conflicts,kids,onNavigate}){
+  const today=new Date();
   const upcoming=[];
   sports.forEach(sp=>{
     sp.sessions.forEach(sess=>{
@@ -405,83 +545,65 @@ function Dashboard({sports,summerData,conflicts,onNavigate}){
     });
   });
   upcoming.sort((a,b)=>a.diff-b.diff);
-
-  // Finances
-  const allSess=sports.flatMap(sp=>sp.sessions.map(s=>({...s,kidKey:sp.kidKey,sportName:sp.name})));
+  const allSess=sports.flatMap(sp=>sp.sessions.map(s=>({...s,kidKey:sp.kidKey})));
   const grandTotal=allSess.filter(s=>s.enrolled).reduce((sum,s)=>sum+Number(s.cost||0),0);
-  const byKid=KIDS.map(k=>({...k,total:allSess.filter(s=>s.kidKey===k.key&&s.enrolled).reduce((sum,s)=>sum+Number(s.cost||0),0)}));
-
-  // Mini calendar for current month
   const yr=today.getFullYear(),mo=today.getMonth();
   const first=new Date(yr,mo,1).getDay(),dim=new Date(yr,mo+1,0).getDate();
   const calCells=[];for(let i=0;i<first;i++)calCells.push(null);for(let d=1;d<=dim;d++)calCells.push(d);
   const meetDates=new Set(sports.flatMap(sp=>sp.sessions.flatMap(sess=>sess.meets.map(m=>Number((m.dateStart||m.date||"").split("-")[2])))));
-
   const tileStyle={background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"18px 20px",cursor:"pointer",transition:"border-color 0.15s"};
-
   return(
     <div>
       <div style={{marginBottom:22}}>
         <div style={{fontSize:13,color:C.text2,marginBottom:4}}>{today.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"})}</div>
         <div style={{fontSize:24,fontWeight:700,color:C.text}}>Good {today.getHours()<12?"morning":today.getHours()<17?"afternoon":"evening"} 👋</div>
       </div>
-
-      {/* Top row — upcoming + conflict alert */}
-      <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"18px 20px",marginBottom:14,cursor:"pointer"}} onClick={()=>onNavigate("activities","calendar")}>
+      {/* Upcoming */}
+      <div style={{...tileStyle,marginBottom:14}} onClick={()=>onNavigate("activities","calendar")} onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
           <div style={{fontWeight:600,fontSize:15,color:C.text}}>📅 Upcoming meets</div>
           <span style={{fontSize:12,color:C.accent}}>View calendar →</span>
         </div>
-        {upcoming.length===0&&<div style={{fontSize:13,color:C.text3}}>No meets scheduled in the next 60 days.</div>}
+        {upcoming.length===0&&<div style={{fontSize:13,color:C.text3}}>No meets in the next 60 days.</div>}
         <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
           {upcoming.slice(0,4).map((m,i)=>{
-            const sc=getSC(m.sportName);
-            const kid=KIDS.find(k=>k.key===m.kidKey);
+            const sc=getSC(m.sportName);const kid=kids.find(k=>k.key===m.kidKey);
             const dLabel=m.diff===0?"Today":m.diff===1?"Tomorrow":`In ${m.diff} days`;
             const isMulti=m.dateEnd&&m.dateEnd!==m.dateStart;
             return(
               <div key={i} style={{background:sc.bg,border:`1px solid ${m.hasConflict?"#F59E0B":sc.border}`,borderRadius:10,padding:"10px 14px",flex:"1 1 180px",minWidth:160}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
                   <span style={{fontSize:10,fontWeight:600,color:sc.txt,background:"rgba(0,0,0,0.2)",padding:"1px 7px",borderRadius:4}}>{dLabel}</span>
-                  {m.hasConflict&&<span style={{fontSize:10,color:C.warning}}>⚠ Conflict</span>}
-                  {kid&&<KidPill kidKey={m.kidKey} small/>}
+                  {kid&&<KidPill kid={kid} small/>}
                 </div>
                 <div style={{fontWeight:600,fontSize:13,color:"#E2E8F0",marginBottom:2}}>{m.name}</div>
                 <div style={{fontSize:11,color:"#64748B"}}>{isMulti?`${fmtDate(m.dateStart)} – ${fmtDate(m.dateEnd)}`:fmtDate(m.dateStart)}{m.time?` · ${m.time}`:""}</div>
-                {m.location&&<div style={{fontSize:11,color:"#4A5568",marginTop:2}}>{m.location}</div>}
               </div>
             );
           })}
         </div>
       </div>
-
-      {/* Middle row — kids + finances */}
+      {/* Kids + Finances */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14}}>
-        {/* Kids tile */}
-        <div style={tileStyle} onClick={()=>onNavigate("activities","activities")} onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
+        <div style={tileStyle} onClick={()=>onNavigate("kids-dir")} onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
             <div style={{fontWeight:600,fontSize:15,color:C.text}}>👨‍👩‍👧‍👦 Kids</div>
             <span style={{fontSize:12,color:C.accent}}>View all →</span>
           </div>
-          <div style={{display:"flex",flexDirection:"column",gap:10}}>
-            {KIDS.filter(k=>k.key!=="sadie").map(k=>{
-              const kSports=sports.filter(s=>s.key===k.key||s.kidKey===k.key);
-              const sportNames=[...new Set(kSports.map(s=>s.name))];
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {kids.filter(k=>k.key!=="sadie").map(k=>{
+              const ks=sports.filter(s=>s.kidKey===k.key);
+              const sn=[...new Set(ks.map(s=>s.name))];
               return(
-                <div key={k.key} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",background:C.card2,borderRadius:8,border:`1px solid ${C.border}`}}>
-                  <KidAvatar kidKey={k.key} size={32}/>
-                  <div style={{flex:1}}>
-                    <div style={{fontSize:13,fontWeight:600,color:C.text}}>{k.name}</div>
-                    <div style={{fontSize:11,color:C.text3}}>{sportNames.length?sportNames.join(" · "):"No activities"}</div>
-                  </div>
+                <div key={k.key} onClick={e=>{e.stopPropagation();onNavigate("kid-profile",k.key);}} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",background:C.card2,borderRadius:8,border:`1px solid ${C.border}`,cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.borderColor=k.color} onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
+                  <KidAvatar kid={k} size={32}/>
+                  <div style={{flex:1}}><div style={{fontSize:13,fontWeight:600,color:k.color}}>{k.name}</div><div style={{fontSize:11,color:C.text3}}>{sn.length?sn.join(" · "):"No activities"}</div></div>
                   <div style={{fontSize:11,color:C.text3}}>Age {ageAsOf(k.dob,"2026-06-22")}</div>
                 </div>
               );
             })}
           </div>
         </div>
-
-        {/* Finances tile */}
         <div style={tileStyle} onClick={()=>onNavigate("activities","finances")} onMouseEnter={e=>e.currentTarget.style.borderColor=C.success} onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
             <div style={{fontWeight:600,fontSize:15,color:C.text}}>💰 Finances</div>
@@ -489,13 +611,15 @@ function Dashboard({sports,summerData,conflicts,onNavigate}){
           </div>
           <div style={{fontSize:28,fontWeight:700,color:C.text,marginBottom:14}}>{fmtMoney(grandTotal)}</div>
           <div style={{display:"flex",flexDirection:"column",gap:6}}>
-            {byKid.filter(k=>k.total>0).map(k=>{
-              const pct=grandTotal?Math.round((k.total/grandTotal)*100):0;
+            {kids.filter(k=>k.key!=="sadie").map(k=>{
+              const t=allSess.filter(s=>s.kidKey===k.key&&s.enrolled).reduce((sum,s)=>sum+Number(s.cost||0),0);
+              if(!t)return null;
+              const pct=grandTotal?Math.round((t/grandTotal)*100):0;
               return(
-                <div key={k.key}>
+                <div key={k.key} onClick={e=>{e.stopPropagation();onNavigate("kid-profile",k.key);}} style={{cursor:"pointer"}}>
                   <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:3}}>
                     <span style={{color:k.color,fontWeight:500}}>{k.name}</span>
-                    <span style={{color:C.text,fontWeight:500}}>{fmtMoney(k.total)}</span>
+                    <span style={{color:C.text,fontWeight:500}}>{fmtMoney(t)}</span>
                   </div>
                   <div style={{background:C.card3,borderRadius:4,height:5,overflow:"hidden"}}>
                     <div style={{background:k.color,height:"100%",width:`${pct}%`,borderRadius:4}}/>
@@ -506,45 +630,32 @@ function Dashboard({sports,summerData,conflicts,onNavigate}){
           </div>
         </div>
       </div>
-
-      {/* Bottom row — mini calendar + active sports */}
+      {/* Mini calendar + active sports */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
-        {/* Mini calendar */}
         <div style={tileStyle} onClick={()=>onNavigate("activities","calendar")} onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
             <div style={{fontWeight:600,fontSize:15,color:C.text}}>🗓 {MONTHS[mo]} {yr}</div>
-            <span style={{fontSize:12,color:C.accent}}>Open calendar →</span>
+            <span style={{fontSize:12,color:C.accent}}>Open →</span>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:3}}>
             {DAYS.map(d=><div key={d} style={{textAlign:"center",fontSize:10,color:C.text3,fontWeight:500,padding:"2px 0"}}>{d[0]}</div>)}
           </div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2}}>
-            {calCells.map((d,i)=>{
-              if(!d)return <div key={i}/>;
-              const isToday=d===today.getDate();
-              const hasMeet=meetDates.has(d);
-              return <div key={i} style={{aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,borderRadius:4,background:isToday?C.accent:hasMeet?"#0A1F35":"transparent",color:isToday?"#fff":hasMeet?"#38BDF8":C.text3,fontWeight:isToday?700:400,position:"relative"}}>{d}{hasMeet&&!isToday&&<div style={{position:"absolute",bottom:1,left:"50%",transform:"translateX(-50%)",width:3,height:3,borderRadius:"50%",background:"#38BDF8"}}/>}</div>;
-            })}
+            {calCells.map((d,i)=>{if(!d)return <div key={i}/>;const isToday=d===today.getDate();const hasMeet=meetDates.has(d);return <div key={i} style={{aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,borderRadius:4,background:isToday?C.accent:hasMeet?"#0A1F35":"transparent",color:isToday?"#fff":hasMeet?"#38BDF8":C.text3,fontWeight:isToday?700:400}}>{d}</div>;})}
           </div>
         </div>
-
-        {/* Active sports */}
         <div style={tileStyle} onClick={()=>onNavigate("activities","activities")} onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-            <div style={{fontWeight:600,fontSize:15,color:C.text}}>🏃 Active now</div>
-            <span style={{fontSize:12,color:C.accent}}>All activities →</span>
+            <div style={{fontWeight:600,fontSize:15,color:C.text}}>🎯 Active now</div>
+            <span style={{fontSize:12,color:C.accent}}>All →</span>
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
             {sports.filter(sp=>sp.sessions.some(s=>s.enrolled)).slice(0,5).map(sp=>{
-              const sc=getSC(sp.name);
-              const sess=sp.sessions.find(s=>s.enrolled);
+              const sc=getSC(sp.name);const sess=sp.sessions.find(s=>s.enrolled);const kid=kids.find(k=>k.key===sp.kidKey);
               return(
                 <div key={sp.id} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 10px",background:sc.bg,border:`1px solid ${sc.border}`,borderRadius:8}}>
                   <div style={{width:8,height:8,borderRadius:"50%",background:sc.txt,flexShrink:0}}/>
-                  <div style={{flex:1}}>
-                    <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:12,fontWeight:600,color:sc.txt}}>{sp.name}</span><KidPill kidKey={sp.kidKey} small/></div>
-                    {sess&&<div style={{fontSize:10,color:"#64748B",marginTop:1}}>{sess.practiceDays.join(", ")} · {sess.practiceTime}</div>}
-                  </div>
+                  <div style={{flex:1}}><div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:12,fontWeight:600,color:sc.txt}}>{sp.name}</span>{kid&&<KidPill kid={kid} small/>}</div>{sess&&<div style={{fontSize:10,color:"#64748B",marginTop:1}}>{sess.practiceDays.join(", ")} · {sess.practiceTime}</div>}</div>
                 </div>
               );
             })}
@@ -555,26 +666,24 @@ function Dashboard({sports,summerData,conflicts,onNavigate}){
   );
 }
 
-// ── Activities Detail Page ──
-function ActivitiesPage({sports,setSports,conflicts,setConflicts,summerData,settings,initialTab}){
+// ── Activities Page ──
+function ActivitiesPage({sports,setSports,conflicts,setConflicts,summerData,settings,initialTab,kids,onKidClick}){
   const [sub,setSub]=useState(initialTab||"calendar");
   const [showSummer,setShowSummer]=useState(true);
   const [showEC,setShowEC]=useState(true);
   const [filterKid,setFilterKid]=useState("all");
   const [filterSport,setFilterSport]=useState("all");
-  const [expanded,setExpanded]=useState(null);
-  const [selectedSport,setSelectedSport]=useState(null);
+  const [selectedSportId,setSelectedSportId]=useState(null);
   const [addSport,setAddSport]=useState(false);
   const [editSport,setEditSport]=useState(null);
   const [addSession,setAddSession]=useState(null);
   const [editSession,setEditSession]=useState(null);
   const [addMeet,setAddMeet]=useState(null);
   const [editMeet,setEditMeet]=useState(null);
-
   const sportOptions=settings.sportOptions||DEFAULT_SPORT_OPTIONS;
   const uniqueSports=[...new Set(sports.map(s=>s.name))].sort();
 
-  function persist(u){setSports(u);store.set(SK.activities,u);}  // async fire-and-forget
+  function persist(u){setSports(u);store.set(SK.activities,u);}
   function saveSport(sp){const u=editSport?sports.map(s=>s.id===sp.id?sp:s):[...sports,sp];persist(u);setAddSport(false);setEditSport(null);}
   function saveSession(sid,sess){const u=sports.map(s=>s.id===sid?{...s,sessions:editSession?s.sessions.map(x=>x.id===sess.id?sess:x):[...s.sessions,sess]}:s);persist(u);setAddSession(null);setEditSession(null);}
   function saveMeet(sid,sessId,meet){const u=sports.map(s=>s.id===sid?{...s,sessions:s.sessions.map(sess=>sess.id===sessId?{...sess,meets:editMeet?sess.meets.map(m=>m.id===meet.id?meet:m):[...sess.meets,meet]}:sess)}:s);persist(u);setAddMeet(null);setEditMeet(null);}
@@ -597,58 +706,132 @@ function ActivitiesPage({sports,setSports,conflicts,setConflicts,summerData,sett
 
   const filtered=sports.filter(s=>(filterKid==="all"||s.kidKey===filterKid)&&(filterSport==="all"||s.name===filterSport));
   const SUBTABS=[{k:"calendar",l:"📅 Calendar"},{k:"activities",l:"🎯 Activities"},{k:"results",l:"🏆 Results"},{k:"finances",l:"💰 Finances"}];
+  const today=new Date();
 
-  // ── Finances ──
+  // ── Finances sub-component ──
   function FinancesView(){
     const [view,setView]=useState("child");
-    const allSessions=sports.flatMap(sp=>sp.sessions.map(sess=>({...sess,sportName:sp.name,kidKey:sp.kidKey,teamName:sp.teamName})));
-    const grandTotal=allSessions.filter(s=>s.enrolled).reduce((sum,s)=>sum+Number(s.cost||0),0);
-    const byChild=KIDS.map(k=>{const sessions=allSessions.filter(s=>s.kidKey===k.key&&s.enrolled);return{...k,sessions,total:sessions.reduce((sum,s)=>sum+Number(s.cost||0),0)};}).filter(k=>k.sessions.length>0);
-    const bySport=[...new Set(sports.map(s=>s.name))].map(sport=>{const ss=allSessions.filter(s=>s.sportName===sport&&s.enrolled);return{sport,total:ss.reduce((sum,s)=>sum+Number(s.cost||0),0),sessions:ss,kids:[...new Set(ss.map(s=>s.kidKey))]};}).filter(s=>s.sessions.length>0).sort((a,b)=>b.total-a.total);
-    const byMonth=()=>{const map={};allSessions.filter(s=>s.enrolled&&s.start).forEach(sess=>{const start=new Date(sess.start),end=new Date(sess.end||sess.start);const cost=Number(sess.cost||0);const months=Math.max(1,Math.round((end-start)/(1000*60*60*24*30)));const monthly=cost/months;let cur=new Date(start);while(cur<=end){const key=`${cur.getFullYear()}-${String(cur.getMonth()+1).padStart(2,"0")}`;if(!map[key])map[key]={label:`${MONTHS[cur.getMonth()].slice(0,3)} ${cur.getFullYear()}`,total:0};map[key].total+=monthly;cur.setMonth(cur.getMonth()+1);}});return Object.entries(map).sort((a,b)=>a[0].localeCompare(b[0])).map(([k,v])=>({key:k,...v}));};
+    const allS=sports.flatMap(sp=>sp.sessions.map(s=>({...s,sportName:sp.name,kidKey:sp.kidKey,teamName:sp.teamName})));
+    const grandTotal=allS.filter(s=>s.enrolled).reduce((sum,s)=>sum+Number(s.cost||0),0);
+    const byChild=kids.map(k=>{const sessions=allS.filter(s=>s.kidKey===k.key&&s.enrolled);return{...k,sessions,total:sessions.reduce((sum,s)=>sum+Number(s.cost||0),0)};}).filter(k=>k.sessions.length>0);
+    const bySport=[...new Set(sports.map(s=>s.name))].map(sport=>{const ss=allS.filter(s=>s.sportName===sport&&s.enrolled);return{sport,total:ss.reduce((sum,s)=>sum+Number(s.cost||0),0),sessions:ss,kids2:[...new Set(ss.map(s=>s.kidKey))]};}).filter(s=>s.sessions.length>0).sort((a,b)=>b.total-a.total);
+    const byMonth=()=>{const map={};allS.filter(s=>s.enrolled&&s.start).forEach(sess=>{const start=new Date(sess.start),end=new Date(sess.end||sess.start);const cost=Number(sess.cost||0);const months=Math.max(1,Math.round((end-start)/(1000*60*60*24*30)));const monthly=cost/months;let cur=new Date(start);while(cur<=end){const key=`${cur.getFullYear()}-${String(cur.getMonth()+1).padStart(2,"0")}`;if(!map[key])map[key]={label:`${MONTHS[cur.getMonth()].slice(0,3)} ${cur.getFullYear()}`,total:0};map[key].total+=monthly;cur.setMonth(cur.getMonth()+1);}});return Object.entries(map).sort((a,b)=>a[0].localeCompare(b[0])).map(([k,v])=>({key:k,...v}));};
     const VIEWS=[{k:"child",l:"By Child"},{k:"sport",l:"By Sport"},{k:"month",l:"By Month"},{k:"session",l:"By Session"}];
     return(
       <div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:10,marginBottom:20}}>
-          <div style={{background:"#1E1B4B",borderRadius:12,padding:"16px 18px",border:"1px solid #4338CA"}}>
-            <div style={{fontSize:12,color:"#A5B4FC",marginBottom:4}}>Total spending</div>
-            <div style={{fontSize:24,fontWeight:700,color:"#fff"}}>{fmtMoney(grandTotal)}</div>
-          </div>
-          {KIDS.map(k=>{const t=allSessions.filter(s=>s.kidKey===k.key&&s.enrolled).reduce((sum,s)=>sum+Number(s.cost||0),0);if(!t)return null;return(<div key={k.key} style={{background:k.bg,borderRadius:12,padding:"16px 18px",border:`1px solid ${k.color}44`}}><div style={{fontSize:12,color:k.color,marginBottom:4}}>{k.name}</div><div style={{fontSize:20,fontWeight:700,color:C.text}}>{fmtMoney(t)}</div></div>);})}
+          <div style={{background:"#1E1B4B",borderRadius:12,padding:"16px 18px",border:"1px solid #4338CA"}}><div style={{fontSize:12,color:"#A5B4FC",marginBottom:4}}>Total</div><div style={{fontSize:24,fontWeight:700,color:"#fff"}}>{fmtMoney(grandTotal)}</div></div>
+          {kids.map(k=>{const t=allS.filter(s=>s.kidKey===k.key&&s.enrolled).reduce((sum,s)=>sum+Number(s.cost||0),0);if(!t)return null;return(<div key={k.key} onClick={()=>onKidClick&&onKidClick(k.key)} style={{background:k.bg,borderRadius:12,padding:"16px 18px",border:`1px solid ${k.color}44`,cursor:"pointer"}}><div style={{fontSize:12,color:k.color,marginBottom:4}}>{k.name}</div><div style={{fontSize:20,fontWeight:700,color:C.text}}>{fmtMoney(t)}</div></div>);})}
         </div>
-        <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
-          {VIEWS.map(v=><button key={v.k} onClick={()=>setView(v.k)} style={{padding:"6px 16px",borderRadius:8,border:`1px solid ${view===v.k?C.accent:C.border}`,background:view===v.k?C.accent:C.card2,color:view===v.k?"#fff":C.text2,cursor:"pointer",fontSize:13,fontWeight:view===v.k?500:400}}>{v.l}</button>)}
-        </div>
+        <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>{VIEWS.map(v=><button key={v.k} onClick={()=>setView(v.k)} style={{padding:"6px 16px",borderRadius:8,border:`1px solid ${view===v.k?C.accent:C.border}`,background:view===v.k?C.accent:C.card2,color:view===v.k?"#fff":C.text2,cursor:"pointer",fontSize:13}}>{v.l}</button>)}</div>
         {view==="child"&&byChild.map(k=>(
           <div key={k.key} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden",marginBottom:12}}>
-            <div style={{background:k.bg,padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <div style={{display:"flex",alignItems:"center",gap:10}}><KidAvatar kidKey={k.key} size={32}/><span style={{fontWeight:600,fontSize:15,color:k.color}}>{k.name}</span></div>
+            <div style={{background:k.bg,padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}} onClick={()=>onKidClick&&onKidClick(k.key)}>
+              <div style={{display:"flex",alignItems:"center",gap:10}}><KidAvatar kid={k} size={32}/><span style={{fontWeight:600,fontSize:15,color:k.color}}>{k.name}</span></div>
               <span style={{fontWeight:700,fontSize:18,color:"#E2E8F0"}}>{fmtMoney(k.total)}</span>
             </div>
             {k.sessions.map((s,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 16px",borderBottom:i<k.sessions.length-1?`1px solid ${C.border}`:"none"}}><div><div style={{fontSize:13,color:C.text,fontWeight:500}}>{s.sportName} — {s.name}</div><div style={{fontSize:11,color:C.text3}}>{s.teamName}</div></div><span style={{fontWeight:600,color:C.text,fontSize:13}}>{fmtMoney(s.cost)}</span></div>)}
           </div>
         ))}
-        {view==="sport"&&bySport.map((s,i)=>{const sc=getSC(s.sport);return(<div key={i} style={{background:C.card,border:`1px solid ${sc.border}`,borderLeft:`4px solid ${sc.txt}`,borderRadius:12,padding:"12px 16px",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}><SportPill name={s.sport}/>{s.kids.map(k=><KidPill key={k} kidKey={k} small/>)}</div><div style={{fontSize:12,color:C.text3}}>{s.sessions.length} session{s.sessions.length>1?"s":""}</div></div><span style={{fontWeight:700,fontSize:18,color:sc.txt}}>{fmtMoney(s.total)}</span></div>);})}
+        {view==="sport"&&bySport.map((s,i)=>{const sc=getSC(s.sport);return(<div key={i} style={{background:C.card,border:`1px solid ${sc.border}`,borderLeft:`4px solid ${sc.txt}`,borderRadius:12,padding:"12px 16px",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}><SportPill name={s.sport}/>{s.kids2.map(kk=>{const kid=kids.find(k=>k.key===kk);return kid?<KidPill key={kk} kid={kid} small/>:null;})}</div><div style={{fontSize:12,color:C.text3}}>{s.sessions.length} session{s.sessions.length>1?"s":""}</div></div><span style={{fontWeight:700,fontSize:18,color:sc.txt}}>{fmtMoney(s.total)}</span></div>);})}
         {view==="month"&&byMonth().map((m,i)=>{const pct=grandTotal?Math.round((m.total/grandTotal)*100):0;return(<div key={i} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"12px 16px",marginBottom:8}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}><span style={{fontWeight:500,fontSize:14,color:C.text}}>{m.label}</span><span style={{fontWeight:700,fontSize:15,color:C.accent}}>{fmtMoney(m.total)}</span></div><div style={{background:C.card2,borderRadius:4,height:6,overflow:"hidden"}}><div style={{background:C.accent,height:"100%",width:`${pct}%`,borderRadius:4}}/></div></div>);})}
         {view==="session"&&(
           <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden"}}>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr auto",padding:"10px 16px",background:C.card3,borderBottom:`1px solid ${C.border}`}}>
-              {["Activity","Kid","Session","Cost"].map(h=><div key={h} style={{fontSize:11,fontWeight:600,color:C.text3,textTransform:"uppercase",letterSpacing:"0.05em"}}>{h}</div>)}
-            </div>
-            {allSessions.filter(s=>s.enrolled).sort((a,b)=>Number(b.cost||0)-Number(a.cost||0)).map((s,i)=>(
-              <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr auto",padding:"10px 16px",borderBottom:`1px solid ${C.border}`,background:i%2===0?C.card:C.card2}}>
-                <div><SportPill name={s.sportName}/></div>
-                <div style={{alignSelf:"center"}}><KidPill kidKey={s.kidKey} small/></div>
-                <div style={{fontSize:12,color:C.text2,alignSelf:"center"}}>{s.name}</div>
-                <div style={{fontWeight:600,color:C.text,fontSize:13,alignSelf:"center"}}>{fmtMoney(s.cost)}</div>
-              </div>
-            ))}
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr auto",padding:"12px 16px",background:C.card3,borderTop:`1px solid ${C.border}`}}>
-              <div style={{fontWeight:600,color:C.text,gridColumn:"1/4"}}>Total</div>
-              <div style={{fontWeight:700,color:C.accent,fontSize:15}}>{fmtMoney(grandTotal)}</div>
-            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr auto",padding:"10px 16px",background:C.card3,borderBottom:`1px solid ${C.border}`}}>{["Activity","Kid","Session","Cost"].map(h=><div key={h} style={{fontSize:11,fontWeight:600,color:C.text3,textTransform:"uppercase",letterSpacing:"0.05em"}}>{h}</div>)}</div>
+            {allS.filter(s=>s.enrolled).sort((a,b)=>Number(b.cost||0)-Number(a.cost||0)).map((s,i)=>{const kid=kids.find(k=>k.key===s.kidKey);return(<div key={i} style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr auto",padding:"10px 16px",borderBottom:`1px solid ${C.border}`,background:i%2===0?C.card:C.card2}}><div><SportPill name={s.sportName}/></div><div style={{alignSelf:"center"}}>{kid&&<KidPill kid={kid} small/>}</div><div style={{fontSize:12,color:C.text2,alignSelf:"center"}}>{s.name}</div><div style={{fontWeight:600,color:C.text,fontSize:13,alignSelf:"center"}}>{fmtMoney(s.cost)}</div></div>);})}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr auto",padding:"12px 16px",background:C.card3,borderTop:`1px solid ${C.border}`}}><div style={{fontWeight:600,color:C.text,gridColumn:"1/4"}}>Total</div><div style={{fontWeight:700,color:C.accent,fontSize:15}}>{fmtMoney(grandTotal)}</div></div>
           </div>
         )}
+      </div>
+    );
+  }
+
+  // ── Sport detail page ──
+  const selectedSport=sports.find(s=>s.id===selectedSportId);
+  if(sub==="activities"&&selectedSportId&&selectedSport){
+    const sp=selectedSport;
+    const sc=getSC(sp.name);
+    const icon2=SPORT_ICON[sp.name]||"🎯";
+    const kid=kids.find(k=>k.key===sp.kidKey);
+    const today2=new Date();
+    return(
+      <div>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
+          <button onClick={()=>setSelectedSportId(null)} style={{background:"none",border:"none",cursor:"pointer",color:C.accent,fontSize:13,padding:0}}>‹ Back to activities</button>
+          <div style={{display:"flex",gap:8}}>
+            {sp.website&&<a href={sp.website} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:sc.txt,background:sc.bg,padding:"5px 12px",borderRadius:7,textDecoration:"none",border:`1px solid ${sc.border}`}}>Site ↗</a>}
+            <Btn onClick={()=>setEditSport(sp)} variant="secondary" small>Edit</Btn>
+            <Btn onClick={()=>setAddSession({sportId:sp.id})} small>+ Add session</Btn>
+          </div>
+        </div>
+        <div style={{background:sc.bg,border:`1.5px solid ${sc.border}`,borderRadius:16,padding:"20px 22px",marginBottom:20,display:"flex",alignItems:"flex-start",gap:18}}>
+          <div style={{fontSize:48}}>{icon2}</div>
+          <div style={{flex:1}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
+              <div style={{fontSize:22,fontWeight:700,color:sc.txt}}>{sp.name}</div>
+              {kid&&<KidPill kid={kid}/>}
+              {sp.sessions.some(s=>s.enrolled)&&<span style={{fontSize:11,background:"#052E16",color:"#4ADE80",padding:"2px 8px",borderRadius:20,fontWeight:600}}>Active</span>}
+            </div>
+            <div style={{fontSize:14,color:"#94A3B8",marginBottom:4}}>{sp.teamName}</div>
+            {sp.location&&<div style={{fontSize:13,color:"#64748B"}}>{sp.location}{sp.phone?` · ${sp.phone}`:""}</div>}
+            {sp.coach&&<div style={{fontSize:13,color:"#64748B",marginTop:2}}>Coach: {sp.coach}</div>}
+            {sp.notes&&<div style={{fontSize:12,color:"#4A5568",marginTop:6,fontStyle:"italic"}}>{sp.notes}</div>}
+          </div>
+        </div>
+        <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:12}}>Sessions</div>
+        {sp.sessions.length===0&&<div style={{textAlign:"center",padding:"30px",color:C.text3,fontSize:13,background:C.card,borderRadius:12,border:`1px solid ${C.border}`,marginBottom:16}}>No sessions yet.</div>}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:12,marginBottom:24}}>
+          {sp.sessions.map(sess=>{
+            const endDate=sess.end?new Date(sess.end+"T12:00:00"):null;
+            const isPast=endDate&&endDate<today2;
+            const isActive=sess.enrolled&&!isPast;
+            return(
+              <div key={sess.id} style={{background:isActive?sc.bg:C.card2,border:`1.5px solid ${isActive?sc.border:C.border}`,borderRadius:12,padding:16,opacity:isPast?0.5:1,position:"relative"}}>
+                <div style={{position:"absolute",top:12,right:12,fontSize:10,background:isActive?"#052E16":isPast?"#1F2937":"#2D2005",color:isActive?"#4ADE80":isPast?"#6B7280":"#FCD34D",padding:"2px 8px",borderRadius:20,fontWeight:600}}>{isActive?"Active":isPast?"Past":"Reference"}</div>
+                <div style={{fontWeight:700,fontSize:14,color:isActive?sc.txt:C.text,marginBottom:6,paddingRight:60}}>{sess.name}</div>
+                <div style={{fontSize:12,color:isActive?"#94A3B8":C.text3,marginBottom:4}}>{sess.start} → {sess.end}</div>
+                {sess.practiceDays.length>0&&<div style={{fontSize:12,color:isActive?"#94A3B8":C.text3,marginBottom:2}}>{sess.practiceDays.join(", ")} at {sess.practiceTime}</div>}
+                {sess.practiceLocation&&<div style={{fontSize:11,color:"#4A5568",marginBottom:4}}>{sess.practiceLocation}</div>}
+                {sess.cost&&<div style={{fontSize:13,fontWeight:600,color:isActive?sc.txt:C.text2,marginBottom:8}}>{fmtMoney(sess.cost)}</div>}
+                <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:sess.meets.length?10:0}}>
+                  <span style={{fontSize:11,color:isActive?sc.txt:C.text3}}>{sess.meets.length} meet{sess.meets.length!==1?"s":""}</span>
+                  <div style={{flex:1}}/>
+                  <Btn onClick={()=>setEditSession({sportId:sp.id,session:sess})} variant="secondary" small>Edit</Btn>
+                  <Btn onClick={()=>deleteSession(sp.id,sess.id)} variant="danger" small>✕</Btn>
+                </div>
+                {sess.meets.map(m=>{
+                  const conf=conflicts.find(c=>c.kidKey===sp.kidKey&&c.date===(m.dateStart||m.date));
+                  const notAtt=conf&&conf.chosen&&conf.chosen!==m.id;
+                  const isMulti=m.dateEnd&&m.dateEnd!==m.dateStart;
+                  const mDate=m.dateStart||m.date;
+                  const mPast=mDate&&new Date(mDate+"T12:00:00")<today2;
+                  return(
+                    <div key={m.id} style={{background:mPast?C.card3:C.card,borderRadius:8,padding:"8px 10px",marginBottom:4,border:`1px solid ${mPast?C.border:sc.border}`,opacity:notAtt?0.5:mPast?0.65:1}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                        <div>
+                          <div style={{fontSize:12,fontWeight:600,color:mPast?C.text2:C.text}}>{notAtt?"✗":mPast?"✓":"★"} {m.name}{isMulti?" (multi-day)":""}</div>
+                          <div style={{fontSize:11,color:C.text3}}>{isMulti?`${fmtDate(m.dateStart)} – ${fmtDate(m.dateEnd)}`:fmtDate(mDate)}{m.time?` · ${m.time}`:""}</div>
+                          {m.location&&<div style={{fontSize:11,color:C.text3}}>{m.location}</div>}
+                          {m.results.length>0&&<div style={{marginTop:4,display:"flex",gap:4,flexWrap:"wrap"}}>{m.results.map((r,ri)=><span key={ri} style={{fontSize:10,background:"#0C2340",color:"#38BDF8",padding:"1px 6px",borderRadius:4}}>{r.event}: {r.time} · {r.place}</span>)}</div>}
+                        </div>
+                        <div style={{display:"flex",gap:4,flexShrink:0,marginLeft:6}}>
+                          <Btn onClick={()=>setEditMeet({sportId:sp.id,sessionId:sess.id,meet:m})} variant="secondary" small>Edit</Btn>
+                          <Btn onClick={()=>deleteMeet(sp.id,sess.id,m.id)} variant="danger" small>✕</Btn>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                <button onClick={()=>setAddMeet({sportId:sp.id,sessionId:sess.id,kidKey:sp.kidKey})} style={{width:"100%",marginTop:6,padding:"5px",borderRadius:6,border:`1px dashed ${C.border}`,background:"transparent",cursor:"pointer",fontSize:11,color:C.text3}}>+ Add meet</button>
+              </div>
+            );
+          })}
+        </div>
+        {(editSport||addSport)&&<SportModal sport={editSport} sportOptions={sportOptions} onSave={saveSport} onClose={()=>{setAddSport(false);setEditSport(null);}}/>}
+        {addSession&&<SessionModal onSave={sess=>saveSession(addSession.sportId,sess)} onClose={()=>setAddSession(null)}/>}
+        {editSession&&<SessionModal session={editSession.session} onSave={sess=>saveSession(editSession.sportId,sess)} onClose={()=>setEditSession(null)}/>}
+        {addMeet&&<MeetModal kidKey={addMeet.kidKey} onSave={meet=>saveMeet(addMeet.sportId,addMeet.sessionId,meet)} onClose={()=>setAddMeet(null)} kids={kids}/>}
+        {editMeet&&<MeetModal meet={editMeet.meet} kidKey={sports.find(s=>s.id===editMeet.sportId)?.kidKey} onSave={meet=>saveMeet(editMeet.sportId,editMeet.sessionId,meet)} onClose={()=>setEditMeet(null)} kids={kids}/>}
       </div>
     );
   }
@@ -656,15 +839,14 @@ function ActivitiesPage({sports,setSports,conflicts,setConflicts,summerData,sett
   return(
     <div>
       <div style={{display:"flex",gap:5,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
-        {SUBTABS.map(t=><button key={t.k} onClick={()=>setSub(t.k)} style={{padding:"7px 16px",borderRadius:8,border:`1px solid ${sub===t.k?C.accent:C.border}`,background:sub===t.k?C.accent:C.card2,color:sub===t.k?"#fff":C.text2,cursor:"pointer",fontSize:13,fontWeight:sub===t.k?500:400}}>{t.l}</button>)}
+        {SUBTABS.map(t=><button key={t.k} onClick={()=>{setSub(t.k);setSelectedSportId(null);}} style={{padding:"7px 16px",borderRadius:8,border:`1px solid ${sub===t.k?C.accent:C.border}`,background:sub===t.k?C.accent:C.card2,color:sub===t.k?"#fff":C.text2,cursor:"pointer",fontSize:13,fontWeight:sub===t.k?500:400}}>{t.l}</button>)}
         <div style={{flex:1}}/>
         <Btn onClick={()=>setAddSport(true)} small>+ Add activity</Btn>
       </div>
-
       {conflicts.length>0&&(
         <div style={{background:"#2D1A05",border:"1px solid #78350F",borderRadius:10,padding:"12px 14px",marginBottom:14}}>
-          <div style={{fontWeight:600,fontSize:13,color:C.warning,marginBottom:8}}>⚠ {conflicts.length} scheduling conflict{conflicts.length>1?"s":""}</div>
-          {conflicts.map((c,i)=>{const kid=KIDS.find(k=>k.key===c.kidKey);return(
+          <div style={{fontWeight:600,fontSize:13,color:C.warning,marginBottom:8}}>⚠ {conflicts.length} conflict{conflicts.length>1?"s":""}</div>
+          {conflicts.map((c,i)=>{const kid=kids.find(k=>k.key===c.kidKey);return(
             <div key={i} style={{background:C.card2,borderRadius:8,padding:"9px 12px",marginBottom:6}}>
               <div style={{fontWeight:500,marginBottom:5,color:C.text,fontSize:12}}>{kid?.name} — {c.date}: <span style={{color:C.warning}}>{c.events.map(e=>e.name).join(" vs ")}</span></div>
               <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
@@ -675,7 +857,6 @@ function ActivitiesPage({sports,setSports,conflicts,setConflicts,summerData,sett
           );})}
         </div>
       )}
-
       {sub==="calendar"&&(
         <div>
           <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
@@ -684,49 +865,36 @@ function ActivitiesPage({sports,setSports,conflicts,setConflicts,summerData,sett
             <button onClick={()=>setShowSummer(!showSummer)} style={{padding:"3px 12px",borderRadius:6,border:`1px solid ${showSummer?C.accent:C.border}`,background:showSummer?"#2D1A05":C.card2,color:showSummer?"#FCD34D":C.text3,cursor:"pointer",fontSize:12}}>Summer</button>
             <span style={{fontSize:11,color:C.text3}}>Tap any event to edit</span>
           </div>
-          <CalendarView sports={sports} summerData={summerData} showSummer={showSummer} showEC={showEC} conflicts={conflicts} onEventClick={handleCalClick}/>
+          <CalendarView sports={sports} summerData={summerData} showSummer={showSummer} showEC={showEC} conflicts={conflicts} onEventClick={handleCalClick} kids={kids}/>
         </div>
       )}
-
-      {sub==="activities"&&!selectedSport&&(
+      {sub==="activities"&&!selectedSportId&&(
         <div>
-          {/* Filters */}
           <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
             <span style={{fontSize:12,color:C.text2,alignSelf:"center"}}>Kid:</span>
-            {[{key:"all",name:"All"},...KIDS].map(k=><button key={k.key} onClick={()=>setFilterKid(k.key)} style={{padding:"4px 12px",borderRadius:20,border:`1px solid ${filterKid===k.key?C.accent:C.border}`,background:filterKid===k.key?C.accent:C.card2,color:filterKid===k.key?"#fff":C.text2,fontSize:12,cursor:"pointer"}}>{k.name}</button>)}
+            {[{key:"all",name:"All"},...kids].map(k=><button key={k.key} onClick={()=>setFilterKid(k.key)} style={{padding:"4px 12px",borderRadius:20,border:`1px solid ${filterKid===k.key?C.accent:C.border}`,background:filterKid===k.key?C.accent:C.card2,color:filterKid===k.key?"#fff":C.text2,fontSize:12,cursor:"pointer"}}>{k.name}</button>)}
           </div>
           <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:18}}>
             <span style={{fontSize:12,color:C.text2,alignSelf:"center"}}>Sport:</span>
             {["all",...uniqueSports].map(s=><button key={s} onClick={()=>setFilterSport(s)} style={{padding:"4px 12px",borderRadius:20,border:`1px solid ${filterSport===s?C.accent:C.border}`,background:filterSport===s?C.accent:C.card2,color:filterSport===s?"#fff":C.text2,fontSize:12,cursor:"pointer"}}>{s==="all"?"All sports":s}</button>)}
           </div>
-          {/* Tile grid */}
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:12}}>
             {filtered.map(sp=>{
-              const sc=getSC(sp.name);
-              const isActive=sp.sessions.some(s=>s.enrolled);
-              const kid=KIDS.find(k=>k.key===sp.kidKey)||KIDS[0];
-              const activeSess=sp.sessions.filter(s=>s.enrolled);
-              const pracDays=activeSess[0]?.practiceDays||[];
+              const sc=getSC(sp.name);const isActive=sp.sessions.some(s=>s.enrolled);
+              const kid=kids.find(k=>k.key===sp.kidKey);
+              const pracDays=sp.sessions.find(s=>s.enrolled)?.practiceDays||[];
               const totalMeets=sp.sessions.reduce((n,s)=>n+s.meets.length,0);
-              // Sport icon emoji map
-              const SPORT_ICON={"Track & Field":"🏃","Swimming":"🏊","Golf":"⛳","Gymnastics":"🤸","Pickleball":"🏓","Cooking":"👨‍🍳","Soccer":"⚽","Tennis":"🎾","Basketball":"🏀","Dance":"💃","Baseball":"⚾","Softball":"🥎","Volleyball":"🏐"};
-              const icon=SPORT_ICON[sp.name]||"🎯";
+              const icon2=SPORT_ICON[sp.name]||"🎯";
               return(
-                <div key={sp.id} onClick={()=>setSelectedSport(sp.id)}
+                <div key={sp.id} onClick={()=>setSelectedSportId(sp.id)}
                   style={{background:sc.bg,border:`1.5px solid ${sc.border}`,borderRadius:14,padding:"18px 16px",cursor:"pointer",transition:"transform 0.15s,border-color 0.15s",position:"relative",minHeight:160}}
                   onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.borderColor=sc.txt;}}
                   onMouseLeave={e=>{e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.borderColor=sc.border;}}>
-                  {/* Active badge */}
                   {isActive&&<div style={{position:"absolute",top:12,right:12,fontSize:10,background:"#052E16",color:"#4ADE80",padding:"2px 8px",borderRadius:20,fontWeight:600}}>Active</div>}
-                  {/* Icon */}
-                  <div style={{fontSize:32,marginBottom:10}}>{icon}</div>
-                  {/* Sport name */}
+                  <div style={{fontSize:32,marginBottom:10}}>{icon2}</div>
                   <div style={{fontSize:15,fontWeight:700,color:sc.txt,marginBottom:4}}>{sp.name}</div>
-                  {/* Team */}
                   <div style={{fontSize:12,color:"#94A3B8",marginBottom:8}}>{sp.teamName||sp.location||"—"}</div>
-                  {/* Kid badge */}
-                  <div style={{marginBottom:8}}><KidPill kidKey={sp.kidKey} small/></div>
-                  {/* Meta row */}
+                  {kid&&<div style={{marginBottom:8}}><KidPill kid={kid} small/></div>}
                   <div style={{display:"flex",gap:10,fontSize:11,color:"#64748B"}}>
                     {pracDays.length>0&&<span>{pracDays.join(" · ")}</span>}
                     {totalMeets>0&&<span>· {totalMeets} meet{totalMeets>1?"s":""}</span>}
@@ -734,7 +902,6 @@ function ActivitiesPage({sports,setSports,conflicts,setConflicts,summerData,sett
                 </div>
               );
             })}
-            {/* Add tile */}
             <div onClick={()=>setAddSport(true)} style={{background:"transparent",border:`1.5px dashed ${C.border}`,borderRadius:14,padding:"18px 16px",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:160,gap:8}} onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
               <div style={{fontSize:28,color:C.text3}}>＋</div>
               <div style={{fontSize:13,color:C.text3}}>Add activity</div>
@@ -743,121 +910,22 @@ function ActivitiesPage({sports,setSports,conflicts,setConflicts,summerData,sett
           {filtered.length===0&&<div style={{textAlign:"center",padding:"40px 20px",color:C.text3,fontSize:13}}>No activities match this filter.</div>}
         </div>
       )}
-
-      {/* ── Sport detail page ── */}
-      {sub==="activities"&&selectedSport&&(()=>{
-        const sp=sports.find(s=>s.id===selectedSport);
-        if(!sp)return null;
-        const sc=getSC(sp.name);
-        const SPORT_ICON={"Track & Field":"🏃","Swimming":"🏊","Golf":"⛳","Gymnastics":"🤸","Pickleball":"🏓","Cooking":"👨‍🍳","Soccer":"⚽","Tennis":"🎾","Basketball":"🏀","Dance":"💃"};
-        const icon=SPORT_ICON[sp.name]||"🎯";
-        const today2=new Date();
-        return(
-          <div>
-            {/* Back + actions */}
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
-              <button onClick={()=>setSelectedSport(null)} style={{background:"none",border:"none",cursor:"pointer",color:C.accent,fontSize:13,display:"flex",alignItems:"center",gap:4,padding:0}}>‹ Back to activities</button>
-              <div style={{display:"flex",gap:8}}>
-                {sp.website&&<a href={sp.website} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:sc.txt,background:sc.bg,padding:"5px 12px",borderRadius:7,textDecoration:"none",border:`1px solid ${sc.border}`}}>Site ↗</a>}
-                <Btn onClick={()=>setEditSport(sp)} variant="secondary" small>Edit activity</Btn>
-                <Btn onClick={()=>setAddSession({sportId:sp.id})} small>+ Add session</Btn>
-              </div>
-            </div>
-            {/* Header card */}
-            <div style={{background:sc.bg,border:`1.5px solid ${sc.border}`,borderRadius:16,padding:"20px 22px",marginBottom:20,display:"flex",alignItems:"flex-start",gap:18}}>
-              <div style={{fontSize:48}}>{icon}</div>
-              <div style={{flex:1}}>
-                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
-                  <div style={{fontSize:22,fontWeight:700,color:sc.txt}}>{sp.name}</div>
-                  <KidPill kidKey={sp.kidKey}/>
-                  {sp.sessions.some(s=>s.enrolled)&&<span style={{fontSize:11,background:"#052E16",color:"#4ADE80",padding:"2px 8px",borderRadius:20,fontWeight:600}}>Active</span>}
-                </div>
-                <div style={{fontSize:14,color:"#94A3B8",marginBottom:4}}>{sp.teamName}</div>
-                {sp.location&&<div style={{fontSize:13,color:"#64748B"}}>{sp.location}{sp.phone?` · ${sp.phone}`:""}</div>}
-                {sp.coach&&<div style={{fontSize:13,color:"#64748B",marginTop:2}}>Coach: {sp.coach}</div>}
-                {sp.notes&&<div style={{fontSize:12,color:"#4A5568",marginTop:6,fontStyle:"italic"}}>{sp.notes}</div>}
-              </div>
-            </div>
-            {/* Sessions as tiles */}
-            <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:12}}>Sessions</div>
-            {sp.sessions.length===0&&<div style={{textAlign:"center",padding:"30px",color:C.text3,fontSize:13,background:C.card,borderRadius:12,border:`1px solid ${C.border}`,marginBottom:16}}>No sessions yet — add one to start tracking practices and meets.</div>}
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:12,marginBottom:24}}>
-              {sp.sessions.map(sess=>{
-                const endDate=sess.end?new Date(sess.end+"T12:00:00"):null;
-                const isPast=endDate&&endDate<today2;
-                const isActive=sess.enrolled&&!isPast;
-                const opacity=isPast?0.5:1;
-                return(
-                  <div key={sess.id} style={{background:isActive?sc.bg:C.card2,border:`1.5px solid ${isActive?sc.border:C.border}`,borderRadius:12,padding:"16px",opacity,position:"relative"}}>
-                    {/* Status badge */}
-                    <div style={{position:"absolute",top:12,right:12,fontSize:10,background:isActive?"#052E16":isPast?"#1F2937":"#2D2005",color:isActive?"#4ADE80":isPast?"#6B7280":"#FCD34D",padding:"2px 8px",borderRadius:20,fontWeight:600}}>
-                      {isActive?"Active":isPast?"Past":"Reference"}
-                    </div>
-                    <div style={{fontWeight:700,fontSize:14,color:isActive?sc.txt:C.text,marginBottom:6,paddingRight:60}}>{sess.name}</div>
-                    <div style={{fontSize:12,color:isActive?"#94A3B8":C.text3,marginBottom:4}}>{sess.start} → {sess.end}</div>
-                    {sess.practiceDays.length>0&&<div style={{fontSize:12,color:isActive?"#94A3B8":C.text3,marginBottom:2}}>{sess.practiceDays.join(", ")} at {sess.practiceTime}</div>}
-                    {sess.practiceLocation&&<div style={{fontSize:11,color:"#4A5568",marginBottom:4}}>{sess.practiceLocation}</div>}
-                    {sess.cost&&<div style={{fontSize:13,fontWeight:600,color:isActive?sc.txt:C.text2,marginBottom:8}}>{fmtMoney(sess.cost)}</div>}
-                    <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:sess.meets.length?10:0}}>
-                      <span style={{fontSize:11,color:isActive?sc.txt:C.text3}}>{sess.meets.length} meet{sess.meets.length!==1?"s":""}</span>
-                      <div style={{flex:1}}/>
-                      <Btn onClick={()=>setEditSession({sportId:sp.id,session:sess})} variant="secondary" small>Edit</Btn>
-                      <Btn onClick={()=>deleteSession(sp.id,sess.id)} variant="danger" small>✕</Btn>
-                    </div>
-                    {/* Meets inside session */}
-                    {sess.meets.map(m=>{
-                      const conf=conflicts.find(c=>c.kidKey===sp.kidKey&&c.date===(m.dateStart||m.date));
-                      const notAtt=conf&&conf.chosen&&conf.chosen!==m.id;
-                      const isMulti=m.dateEnd&&m.dateEnd!==m.dateStart;
-                      const mDate=m.dateStart||m.date;
-                      const mPast=mDate&&new Date(mDate+"T12:00:00")<today2;
-                      return(
-                        <div key={m.id} style={{background:mPast?C.card3:C.card,borderRadius:8,padding:"8px 10px",marginBottom:4,border:`1px solid ${mPast?C.border:sc.border}`,opacity:notAtt?0.5:mPast?0.65:1}}>
-                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-                            <div>
-                              <div style={{fontSize:12,fontWeight:600,color:mPast?C.text2:C.text}}>{notAtt?"✗":mPast?"✓":"★"} {m.name}{isMulti?" (multi-day)":""}</div>
-                              <div style={{fontSize:11,color:C.text3}}>{isMulti?`${fmtDate(m.dateStart)} – ${fmtDate(m.dateEnd)}`:fmtDate(mDate)}{m.time?` · ${m.time}`:""}</div>
-                              {m.location&&<div style={{fontSize:11,color:C.text3}}>{m.location}</div>}
-                              {notAtt&&<div style={{fontSize:11,color:C.warning}}>Conflict — attending another</div>}
-                              {m.results.length>0&&<div style={{marginTop:4,display:"flex",gap:4,flexWrap:"wrap"}}>{m.results.map((r,ri)=><span key={ri} style={{fontSize:10,background:"#0C2340",color:"#38BDF8",padding:"1px 6px",borderRadius:4}}>{r.event}: {r.time} · {r.place}</span>)}</div>}
-                            </div>
-                            <div style={{display:"flex",gap:4,flexShrink:0,marginLeft:6}}>
-                              <Btn onClick={()=>setEditMeet({sportId:sp.id,sessionId:sess.id,meet:m})} variant="secondary" small>Edit</Btn>
-                              <Btn onClick={()=>deleteMeet(sp.id,sess.id,m.id)} variant="danger" small>✕</Btn>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                    <button onClick={()=>setAddMeet({sportId:sp.id,sessionId:sess.id,kidKey:sp.kidKey})} style={{width:"100%",marginTop:6,padding:"5px",borderRadius:6,border:`1px dashed ${C.border}`,background:"transparent",cursor:"pointer",fontSize:11,color:C.text3}}>+ Add meet</button>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })()}
-
       {sub==="results"&&(
         <div>
           <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
-            {[{key:"all",name:"All"},...KIDS].map(k=><button key={k.key} onClick={()=>setFilterKid(k.key)} style={{padding:"4px 12px",borderRadius:20,border:`1px solid ${filterKid===k.key?C.accent:C.border}`,background:filterKid===k.key?C.accent:C.card2,color:filterKid===k.key?"#fff":C.text2,fontSize:12,cursor:"pointer"}}>{k.name}</button>)}
+            {[{key:"all",name:"All"},...kids].map(k=><button key={k.key} onClick={()=>setFilterKid(k.key)} style={{padding:"4px 12px",borderRadius:20,border:`1px solid ${filterKid===k.key?C.accent:C.border}`,background:filterKid===k.key?C.accent:C.card2,color:filterKid===k.key?"#fff":C.text2,fontSize:12,cursor:"pointer"}}>{k.name}</button>)}
           </div>
           {sports.filter(sp=>filterKid==="all"||sp.kidKey===filterKid).map(sp=>{
             const allMeets=sp.sessions.flatMap(sess=>sess.meets.filter(m=>m.results.length>0).map(m=>({...m,sessName:sess.name})));
             if(!allMeets.length)return null;
+            const kid=kids.find(k=>k.key===sp.kidKey);
             return(
               <div key={sp.id} style={{marginBottom:18}}>
-                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}><SportPill name={sp.name}/><KidPill kidKey={sp.kidKey}/><span style={{fontSize:13,color:C.text2}}>{sp.teamName}</span></div>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}><SportPill name={sp.name}/>{kid&&<KidPill kid={kid}/>}<span style={{fontSize:13,color:C.text2}}>{sp.teamName}</span></div>
                 {allMeets.map(m=>{const isMulti=m.dateEnd&&m.dateEnd!==m.dateStart;return(
                   <div key={m.id} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"12px 14px",marginBottom:8}}>
-                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
-                      <div><div style={{fontWeight:600,fontSize:13,color:C.text}}>★ {m.name}</div><div style={{fontSize:12,color:C.text2}}>{isMulti?`${fmtDate(m.dateStart)} – ${fmtDate(m.dateEnd)}`:(m.dateStart||m.date)} · {m.location}</div></div>
-                      <div style={{fontSize:11,color:C.text3}}>{m.sessName}</div>
-                    </div>
-                    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                      {m.results.map((r,ri)=><div key={ri} style={{background:"#0C2340",border:"1px solid #1E40AF",borderRadius:7,padding:"6px 12px",fontSize:12}}><div style={{fontWeight:600,color:"#38BDF8"}}>{r.event}</div><div style={{color:"#E2E8F0"}}>{r.time} · <b>{r.place}</b></div>{r.notes&&<div style={{fontSize:11,color:"#64748B"}}>{r.notes}</div>}</div>)}
-                    </div>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}><div><div style={{fontWeight:600,fontSize:13,color:C.text}}>★ {m.name}</div><div style={{fontSize:12,color:C.text2}}>{isMulti?`${fmtDate(m.dateStart)} – ${fmtDate(m.dateEnd)}`:(m.dateStart||m.date)} · {m.location}</div></div><div style={{fontSize:11,color:C.text3}}>{m.sessName}</div></div>
+                    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{m.results.map((r,ri)=><div key={ri} style={{background:"#0C2340",border:"1px solid #1E40AF",borderRadius:7,padding:"6px 12px",fontSize:12}}><div style={{fontWeight:600,color:"#38BDF8"}}>{r.event}</div><div style={{color:"#E2E8F0"}}>{r.time} · <b>{r.place}</b></div>{r.notes&&<div style={{fontSize:11,color:"#64748B"}}>{r.notes}</div>}</div>)}</div>
                   </div>
                 );})}
               </div>
@@ -866,27 +934,25 @@ function ActivitiesPage({sports,setSports,conflicts,setConflicts,summerData,sett
           {!sports.some(sp=>(filterKid==="all"||sp.kidKey===filterKid)&&sp.sessions.some(s=>s.meets.some(m=>m.results.length>0)))&&<div style={{textAlign:"center",padding:"40px 20px",color:C.text3,fontSize:13}}>No results recorded yet.</div>}
         </div>
       )}
-
       {sub==="finances"&&<FinancesView/>}
-
       {(addSport||editSport)&&<SportModal sport={editSport} sportOptions={sportOptions} onSave={saveSport} onClose={()=>{setAddSport(false);setEditSport(null);}}/>}
       {addSession&&<SessionModal onSave={sess=>saveSession(addSession.sportId,sess)} onClose={()=>setAddSession(null)}/>}
       {editSession&&<SessionModal session={editSession.session} onSave={sess=>saveSession(editSession.sportId,sess)} onClose={()=>setEditSession(null)}/>}
-      {addMeet&&<MeetModal kidKey={addMeet.kidKey} onSave={meet=>saveMeet(addMeet.sportId,addMeet.sessionId,meet)} onClose={()=>setAddMeet(null)}/>}
-      {editMeet&&<MeetModal meet={editMeet.meet} kidKey={sports.find(s=>s.id===editMeet.sportId)?.kidKey} onSave={meet=>saveMeet(editMeet.sportId,editMeet.sessionId,meet)} onClose={()=>setEditMeet(null)}/>}
+      {addMeet&&<MeetModal kidKey={addMeet.kidKey} onSave={meet=>saveMeet(addMeet.sportId,addMeet.sessionId,meet)} onClose={()=>setAddMeet(null)} kids={kids}/>}
+      {editMeet&&<MeetModal meet={editMeet.meet} kidKey={sports.find(s=>s.id===editMeet.sportId)?.kidKey} onSave={meet=>saveMeet(editMeet.sportId,editMeet.sessionId,meet)} onClose={()=>setEditMeet(null)} kids={kids}/>}
     </div>
   );
 }
 
 // ── Summer Section ──
-function SummerSection({yearData,years,activeYear,setActiveYear,onYearDataChange}){
+function SummerSection({yearData,years,activeYear,setActiveYear,onYearDataChange,kids}){
   const [tab,setTab]=useState("dashboard");
   const [editing,setEditing]=useState(null);
   const [showYearMenu,setShowYearMenu]=useState(false);
   const [addingYear,setAddingYear]=useState(false);
   const [expandedSess,setExpandedSess]=useState(null);
   const [filterKid,setFilterKid]=useState("all");
-  const cur=yearData[activeYear]||{schedule:DEF_SCHED_2026,providers:DEF_PROVIDERS,weeks:DEF_WEEKS_2026,notes:""};
+  const cur=yearData[activeYear]||{schedule:DEF_SCHED,providers:DEF_PROVIDERS,weeks:DEF_WEEKS,notes:""};
   const {schedule,providers,weeks}=cur;
   const isHist=activeYear<new Date().getFullYear();
   function updateCur(patch){onYearDataChange(activeYear,{...cur,...patch});}
@@ -895,9 +961,7 @@ function SummerSection({yearData,years,activeYear,setActiveYear,onYearDataChange
   return(
     <div>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14,flexWrap:"wrap",gap:8}}>
-        <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-          {TABS.map(t=><button key={t.k} onClick={()=>setTab(t.k)} style={{padding:"7px 16px",borderRadius:8,border:`1px solid ${tab===t.k?C.accent:C.border}`,background:tab===t.k?C.accent:C.card2,color:tab===t.k?"#fff":C.text2,cursor:"pointer",fontSize:13,fontWeight:tab===t.k?500:400}}>{t.l}</button>)}
-        </div>
+        <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>{TABS.map(t=><button key={t.k} onClick={()=>setTab(t.k)} style={{padding:"7px 16px",borderRadius:8,border:`1px solid ${tab===t.k?C.accent:C.border}`,background:tab===t.k?C.accent:C.card2,color:tab===t.k?"#fff":C.text2,cursor:"pointer",fontSize:13,fontWeight:tab===t.k?500:400}}>{t.l}</button>)}</div>
         <div style={{position:"relative"}}>
           <button onClick={()=>setShowYearMenu(!showYearMenu)} style={{padding:"7px 16px",borderRadius:8,border:`1px solid ${C.border}`,background:C.card2,cursor:"pointer",fontSize:14,fontWeight:600,color:C.text}}>{activeYear} ▼</button>
           {showYearMenu&&<div style={{position:"absolute",top:42,right:0,background:C.card,border:`1px solid ${C.border}`,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,0.5)",minWidth:160,zIndex:200,overflow:"hidden"}}>
@@ -910,12 +974,12 @@ function SummerSection({yearData,years,activeYear,setActiveYear,onYearDataChange
       {tab==="dashboard"&&(
         <div>
           <div style={{display:"grid",gridTemplateColumns:"100px repeat(4,1fr)",gap:4,marginBottom:4}}>
-            <div/>{KIDS.map(k=><div key={k.key} style={{textAlign:"center",padding:"6px 4px",background:k.bg,borderRadius:8,border:`1px solid ${k.color}33`}}><div style={{fontSize:12,fontWeight:600,color:k.color}}>{k.name}</div><div style={{fontSize:10,color:C.text3}}>Age {ageAsOf(k.dob,`${activeYear}-06-22`)}</div></div>)}
+            <div/>{kids.map(k=><div key={k.key} style={{textAlign:"center",padding:"6px 4px",background:k.bg,borderRadius:8,border:`1px solid ${k.color}33`}}><div style={{fontSize:12,fontWeight:600,color:k.color}}>{k.name}</div><div style={{fontSize:10,color:C.text3}}>Age {ageAsOf(k.dob,`${activeYear}-06-22`)}</div></div>)}
           </div>
           {weeks.map((wk,wi)=>(
             <div key={wi} style={{display:"grid",gridTemplateColumns:"100px repeat(4,1fr)",gap:4,marginBottom:4}}>
               <div style={{background:C.card3,borderRadius:8,padding:"6px 8px",border:`1px solid ${C.border}`}}><div style={{fontWeight:600,fontSize:11,color:C.text}}>{wk.label}</div><div style={{fontSize:10,color:C.text3}}>{wk.dates}</div></div>
-              {KIDS.map(k=>{const s=(schedule[k.key]&&schedule[k.key][wi])||{a:"Unscheduled",note:"",cost:""};const c=getTC(s.a);return(
+              {kids.map(k=>{const s=(schedule[k.key]&&schedule[k.key][wi])||{a:"Unscheduled",note:"",cost:""};const c=getTC(s.a);return(
                 <div key={k.key} onClick={()=>!isHist&&setEditing({kidKey:k.key,weekIdx:wi,kid:k})} style={{background:c.bg,border:`1px solid ${c.border}`,borderRadius:8,padding:"6px 8px",cursor:isHist?"default":"pointer",minHeight:46}} onMouseEnter={e=>{if(!isHist)e.currentTarget.style.opacity="0.75";}} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
                   <div style={{fontWeight:600,fontSize:11,color:c.txt}}>{s.a}</div>
                   {s.note&&<div style={{fontSize:10,color:c.txt,opacity:0.8,marginTop:1,lineHeight:1.3}}>{s.note}</div>}
@@ -929,10 +993,10 @@ function SummerSection({yearData,years,activeYear,setActiveYear,onYearDataChange
       )}
       {tab==="kids"&&(
         <div>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>{[{key:"all",name:"All"},...KIDS].map(k=><button key={k.key} onClick={()=>setFilterKid(k.key)} style={{padding:"5px 14px",borderRadius:20,border:`1px solid ${filterKid===k.key?C.accent:C.border}`,background:filterKid===k.key?C.accent:C.card2,color:filterKid===k.key?"#fff":C.text2,fontSize:13,cursor:"pointer"}}>{k.name}</button>)}</div>
-          {KIDS.filter(k=>filterKid==="all"||k.key===filterKid).map(k=>(
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>{[{key:"all",name:"All"},...kids].map(k=><button key={k.key} onClick={()=>setFilterKid(k.key)} style={{padding:"5px 14px",borderRadius:20,border:`1px solid ${filterKid===k.key?C.accent:C.border}`,background:filterKid===k.key?C.accent:C.card2,color:filterKid===k.key?"#fff":C.text2,fontSize:13,cursor:"pointer"}}>{k.name}</button>)}</div>
+          {kids.filter(k=>filterKid==="all"||k.key===filterKid).map(k=>(
             <div key={k.key} style={{marginBottom:22}}>
-              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}><KidAvatar kidKey={k.key}/><div><div style={{fontWeight:600,fontSize:15,color:C.text}}>{k.name}</div><div style={{fontSize:11,color:C.text2}}>Age {ageAsOf(k.dob,`${activeYear}-06-22`)} · summer {activeYear}</div></div></div>
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}><KidAvatar kid={k}/><div><div style={{fontWeight:600,fontSize:15,color:C.text}}>{k.name}</div><div style={{fontSize:11,color:C.text2}}>Age {ageAsOf(k.dob,`${activeYear}-06-22`)} · summer {activeYear}</div></div></div>
               <div style={{borderRadius:12,overflow:"hidden",border:`1px solid ${C.border}`}}>
                 {weeks.map((wk,wi)=>{const s=(schedule[k.key]&&schedule[k.key][wi])||{a:"Unscheduled",note:"",cost:""};const c=getTC(s.a);return(
                   <div key={wi} onClick={()=>!isHist&&setEditing({kidKey:k.key,weekIdx:wi,kid:k})} style={{display:"grid",gridTemplateColumns:"90px 1fr 1fr auto",alignItems:"center",gap:10,padding:"9px 14px",background:wi%2===0?C.card:C.card2,borderBottom:wi<weeks.length-1?`1px solid ${C.border}`:"none",cursor:isHist?"default":"pointer"}}>
@@ -950,23 +1014,15 @@ function SummerSection({yearData,years,activeYear,setActiveYear,onYearDataChange
       {tab==="programs"&&(
         <div>{providers.map(prov=>{const c=getTC(prov.name)||{bg:C.card2,txt:C.text2,border:C.border};return(
           <div key={prov.id} style={{marginBottom:12,background:C.card,border:`1px solid ${c.border}`,borderLeft:`4px solid ${c.txt}`,borderRadius:12,overflow:"hidden"}}>
-            <div style={{padding:"12px 16px",background:c.bg}}>
-              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:3}}><span style={{fontWeight:600,fontSize:14,color:c.txt}}>{prov.name}</span>{prov.url&&<a href={prov.url} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:c.txt,background:"rgba(0,0,0,0.3)",padding:"2px 8px",borderRadius:5,textDecoration:"none"}}>Site ↗</a>}</div>
-              <div style={{fontSize:12,color:"#94A3B8"}}>{prov.hours} · {prov.location}</div>
-              {prov.notes&&<div style={{fontSize:11,color:"#64748B",marginTop:2}}>{prov.notes}</div>}
-            </div>
-            {prov.sessions.map((sess,si)=>{const key=`${prov.id}-${si}`;const exp=expandedSess===key;const eligible=KIDS.filter(k=>{const age=ageAsOf(k.dob,`${activeYear}-06-22`);return age>=sess.ageMin&&age<=sess.ageMax;});return(
+            <div style={{padding:"12px 16px",background:c.bg}}><div style={{display:"flex",alignItems:"center",gap:10,marginBottom:3}}><span style={{fontWeight:600,fontSize:14,color:c.txt}}>{prov.name}</span>{prov.url&&<a href={prov.url} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:c.txt,background:"rgba(0,0,0,0.3)",padding:"2px 8px",borderRadius:5,textDecoration:"none"}}>Site ↗</a>}</div><div style={{fontSize:12,color:"#94A3B8"}}>{prov.hours} · {prov.location}</div>{prov.notes&&<div style={{fontSize:11,color:"#64748B",marginTop:2}}>{prov.notes}</div>}</div>
+            {prov.sessions.map((sess,si)=>{const key=`${prov.id}-${si}`;const exp=expandedSess===key;const eligible=kids.filter(k=>{const age=ageAsOf(k.dob,`${activeYear}-06-22`);return age>=sess.ageMin&&age<=sess.ageMax;});return(
               <div key={si} style={{borderTop:`1px solid ${C.border}`}}>
                 <div onClick={()=>setExpandedSess(exp?null:key)} style={{display:"grid",gridTemplateColumns:"1fr auto auto",alignItems:"center",gap:10,padding:"10px 16px",cursor:"pointer",background:exp?C.card2:C.card}}>
                   <div><div style={{fontWeight:500,fontSize:13,color:C.text}}>{sess.name}</div><div style={{fontSize:11,color:C.text2}}>{sess.dates}</div></div>
                   <span style={{fontSize:11,background:"#0A2010",color:"#4ADE80",padding:"2px 8px",borderRadius:5}}>Ages {sess.ageMin}–{sess.ageMax}</span>
                   <div style={{textAlign:"right",fontSize:13,fontWeight:600,color:"#4ADE80"}}>{sess.cost?`$${sess.cost}`:"—"}<br/><span style={{fontSize:10,fontWeight:400,color:C.text3}}>{sess.costNote}</span></div>
                 </div>
-                {exp&&<div style={{padding:"0 16px 14px",background:C.card2,borderTop:`1px solid ${C.border}`}}>
-                  <p style={{fontSize:13,color:C.text2,lineHeight:1.6,marginBottom:10}}>{sess.description}</p>
-                  <div style={{display:"flex",gap:7,flexWrap:"wrap",alignItems:"center"}}><span style={{fontSize:12,color:C.text2,fontWeight:500}}>Eligible:</span>{eligible.length?eligible.map(k=><span key={k.key} style={{background:k.bg,color:k.color,borderRadius:5,padding:"2px 9px",fontSize:12,fontWeight:500}}>{k.name} (age {ageAsOf(k.dob,`${activeYear}-06-22`)})</span>):<span style={{fontSize:12,color:C.text3}}>None in age range</span>}</div>
-                  {prov.url&&<a href={prov.url} target="_blank" rel="noopener noreferrer" style={{display:"inline-block",marginTop:10,fontSize:12,color:C.accent,fontWeight:500}}>Register on {prov.name} →</a>}
-                </div>}
+                {exp&&<div style={{padding:"0 16px 14px",background:C.card2,borderTop:`1px solid ${C.border}`}}><p style={{fontSize:13,color:C.text2,lineHeight:1.6,marginBottom:10}}>{sess.description}</p><div style={{display:"flex",gap:7,flexWrap:"wrap",alignItems:"center"}}><span style={{fontSize:12,color:C.text2,fontWeight:500}}>Eligible:</span>{eligible.length?eligible.map(k=><span key={k.key} style={{background:k.bg,color:k.color,borderRadius:5,padding:"2px 9px",fontSize:12,fontWeight:500}}>{k.name} (age {ageAsOf(k.dob,`${activeYear}-06-22`)})</span>):<span style={{fontSize:12,color:C.text3}}>None in age range</span>}</div>{prov.url&&<a href={prov.url} target="_blank" rel="noopener noreferrer" style={{display:"inline-block",marginTop:10,fontSize:12,color:C.accent,fontWeight:500}}>Register on {prov.name} →</a>}</div>}
               </div>
             );})}
           </div>
@@ -976,35 +1032,52 @@ function SummerSection({yearData,years,activeYear,setActiveYear,onYearDataChange
       {tab==="costs"&&activeYear===2026&&(
         <div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:10,marginBottom:18}}>
-            {[{l:"Shay",k:"shay",t:5176.50},{l:"Christian",k:"christian",t:4528},{l:"Aurora",k:"aurora",t:4608}].map(item=>{const kid=KIDS.find(k=>k.key===item.k);return(<div key={item.l} style={{background:kid.bg,borderRadius:12,padding:"14px 16px",border:`1px solid ${kid.color}33`}}><div style={{fontSize:12,color:kid.color,marginBottom:4}}>{item.l}</div><div style={{fontSize:20,fontWeight:700,color:C.text}}>{fmtMoney(item.t)}</div></div>);})}
+            {[{l:"Shay",k:"shay",t:5176.50},{l:"Christian",k:"christian",t:4528},{l:"Aurora",k:"aurora",t:4608}].map(item=>{const kid=kids.find(k=>k.key===item.k);return(<div key={item.l} style={{background:kid?kid.bg:C.card2,borderRadius:12,padding:"14px 16px",border:`1px solid ${kid?kid.color+"44":C.border}`}}><div style={{fontSize:12,color:kid?kid.color:C.text2,marginBottom:4}}>{item.l}</div><div style={{fontSize:20,fontWeight:700,color:C.text}}>{fmtMoney(item.t)}</div></div>);})}
             <div style={{background:"#1E1B4B",borderRadius:12,padding:"14px 16px",border:"1px solid #4338CA"}}><div style={{fontSize:12,color:"#A5B4FC",marginBottom:4}}>Total</div><div style={{fontSize:20,fontWeight:700,color:"#fff"}}>{fmtMoney(14312.50)}</div></div>
           </div>
         </div>
       )}
       {tab==="costs"&&activeYear!==2026&&<div style={{textAlign:"center",padding:"40px 20px",color:C.text3,fontSize:13}}>Add costs via the schedule for {activeYear}.</div>}
-      {editing&&<Modal title={`${editing.kid.name} — ${weeks[editing.weekIdx].label}`} onClose={()=>setEditing(null)}>{(()=>{const [a,setA]=useState(schedule[editing.kidKey][editing.weekIdx].a);const [note,setNote]=useState(schedule[editing.kidKey][editing.weekIdx].note);const [cost,setCost]=useState(schedule[editing.kidKey][editing.weekIdx].cost);const names=["JCC","Unscheduled",...providers.filter(p=>p.name!=="JCC").map(p=>p.name)];return(<><F label="Activity"><Sel value={a} onChange={setA} options={names}/></F><F label="Notes"><Inp value={note} onChange={setNote}/></F><F label="Cost"><Inp value={cost} onChange={setCost} placeholder="$650"/></F><div style={{display:"flex",gap:10,marginTop:10}}><Btn onClick={()=>setEditing(null)} variant="secondary">Cancel</Btn><Btn onClick={()=>saveEntry({a,note,cost})}>Save</Btn></div></>);})()}</Modal>}
-      {addingYear&&<Modal title="Add new summer year" onClose={()=>setAddingYear(false)}>{(()=>{const [y,setY]=useState(Math.max(...years)+1);const [nw,setNw]=useState(8);return(<><F label="Year"><Inp type="number" value={y} onChange={v=>setY(Number(v))}/></F><F label="Weeks"><Inp type="number" value={nw} onChange={v=>setNw(Number(v))}/></F><div style={{display:"flex",gap:10,marginTop:10}}><Btn onClick={()=>setAddingYear(false)} variant="secondary">Cancel</Btn><Btn onClick={()=>{const wks=Array.from({length:nw},(_,i)=>({n:i+1,label:`Week ${i+1}`,dates:`Week ${i+1}`}));const sched={};KIDS.forEach(k=>{sched[k.key]=Array(nw).fill(null).map(()=>({a:"Unscheduled",note:"",cost:""}));});onYearDataChange(y,{schedule:sched,providers:JSON.parse(JSON.stringify(DEF_PROVIDERS)),weeks:wks,notes:""});setAddingYear(false);}}>Create {y}</Btn></div></>);})()}</Modal>}
+      {editing&&(()=>{const [a,setA]=useState(schedule[editing.kidKey][editing.weekIdx].a);const [note,setNote]=useState(schedule[editing.kidKey][editing.weekIdx].note);const [cost,setCost]=useState(schedule[editing.kidKey][editing.weekIdx].cost);const names=["JCC","Unscheduled",...providers.filter(p=>p.name!=="JCC").map(p=>p.name)];return <Modal title={`${editing.kid.name} — ${weeks[editing.weekIdx].label}`} onClose={()=>setEditing(null)}><F label="Activity"><Sel value={a} onChange={setA} options={names}/></F><F label="Notes"><Inp value={note} onChange={setNote}/></F><F label="Cost"><Inp value={cost} onChange={setCost} placeholder="$650"/></F><div style={{display:"flex",gap:10,marginTop:10}}><Btn onClick={()=>setEditing(null)} variant="secondary">Cancel</Btn><Btn onClick={()=>saveEntry({a,note,cost})}>Save</Btn></div></Modal>;})()}
+      {addingYear&&(()=>{const [y,setY]=useState(Math.max(...years)+1);const [nw,setNw]=useState(8);return <Modal title="Add new summer year" onClose={()=>setAddingYear(false)}><F label="Year"><Inp type="number" value={y} onChange={v=>setY(Number(v))}/></F><F label="Weeks"><Inp type="number" value={nw} onChange={v=>setNw(Number(v))}/></F><div style={{display:"flex",gap:10,marginTop:10}}><Btn onClick={()=>setAddingYear(false)} variant="secondary">Cancel</Btn><Btn onClick={()=>{const wks=Array.from({length:nw},(_,i)=>({n:i+1,label:`Week ${i+1}`,dates:`Week ${i+1}`}));const sched={};kids.forEach(k=>{sched[k.key]=Array(nw).fill(null).map(()=>({a:"Unscheduled",note:"",cost:""}));});onYearDataChange(y,{schedule:sched,providers:JSON.parse(JSON.stringify(DEF_PROVIDERS)),weeks:wks,notes:""});setAddingYear(false);}}>Create {y}</Btn></div></Modal>;})()}
     </div>
   );
 }
 
 // ── Settings Modal ──
-function SettingsModal({settings,onSave,allData,onClose}){
+function SettingsModal({settings,onSave,allData,onClose,kids,onSaveKid}){
   const [s,setS]=useState({...settings});
-  const [sec,setSec]=useState("dropdowns");
+  const [sec,setSec]=useState("kids");
+  const [editingKid,setEditingKid]=useState(null);
   const newRef=useRef("");
   function addOpt(){const v=newRef.current.trim();if(v&&!s.sportOptions.includes(v))setS({...s,sportOptions:[...s.sportOptions,v]});document.getElementById("new-opt").value="";newRef.current="";}
   function removeOpt(v){setS({...s,sportOptions:s.sportOptions.filter(x=>x!==v)});}
   function download(){const blob=new Blob([JSON.stringify(allData,null,2)],{type:"application/json"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=`zaphire-backup-${new Date().toISOString().slice(0,10)}.json`;a.click();URL.revokeObjectURL(url);}
-  async function handleRestore(newS, d){setSettings(newS);await store.set(SK.settings,newS);if(d){if(d.sports){setSports(d.sports);await store.set(SK.activities,d.sports);}if(d.yearData)for(const [y,dat] of Object.entries(d.yearData)){const nd={...yearData,[Number(y)]:dat};setYearData(nd);await store.set(SK.year(Number(y)),dat);}}setShowSettings(false);}
   return(
     <Modal title="⚙ Settings" onClose={onClose} wide>
+      {editingKid&&<KidEditModal kid={editingKid} onSave={k=>{onSaveKid(k);setEditingKid(null);}} onClose={()=>setEditingKid(null)}/>}
       <div style={{display:"flex",gap:6,marginBottom:18,flexWrap:"wrap"}}>
-        {[{k:"dropdowns",l:"Dropdowns"},{k:"backup",l:"Backup & Restore"},{k:"info",l:"Data Info"}].map(x=><button key={x.k} onClick={()=>setSec(x.k)} style={{padding:"6px 16px",borderRadius:8,border:`1px solid ${sec===x.k?C.accent:C.border}`,background:sec===x.k?C.accent:C.card2,color:sec===x.k?"#fff":C.text2,cursor:"pointer",fontSize:13}}>{x.l}</button>)}
+        {[{k:"kids",l:"👧 Kids"},{k:"dropdowns",l:"Dropdowns"},{k:"backup",l:"Backup"},{k:"info",l:"Info"}].map(x=><button key={x.k} onClick={()=>setSec(x.k)} style={{padding:"6px 16px",borderRadius:8,border:`1px solid ${sec===x.k?C.accent:C.border}`,background:sec===x.k?C.accent:C.card2,color:sec===x.k?"#fff":C.text2,cursor:"pointer",fontSize:13}}>{x.l}</button>)}
       </div>
+      {sec==="kids"&&(
+        <div>
+          <p style={{fontSize:13,color:C.text2,marginBottom:14}}>Tap a child to edit their profile information.</p>
+          {kids.map(kid=>(
+            <div key={kid.key} onClick={()=>setEditingKid(kid)} style={{background:kid.bg,border:`1px solid ${kid.color}44`,borderRadius:10,padding:"12px 16px",marginBottom:10,display:"flex",alignItems:"center",gap:14,cursor:"pointer"}}>
+              <KidAvatar kid={kid} size={40}/>
+              <div style={{flex:1}}>
+                <div style={{fontSize:14,fontWeight:600,color:kid.color}}>{kid.name}</div>
+                <div style={{fontSize:12,color:"#64748B"}}>{kid.grade?`${kid.grade} grade`:""}{kid.school?` · ${kid.school}`:""}{kid.allergies?` · ⚠ ${kid.allergies}`:""}</div>
+                {(kid.emergencyName||kid.doctor)&&<div style={{fontSize:11,color:"#4A5568",marginTop:2}}>{kid.emergencyName?`Emergency: ${kid.emergencyName}`:""}{kid.doctor?` · Dr. ${kid.doctor}`:""}</div>}
+              </div>
+              <span style={{fontSize:12,color:kid.color,opacity:0.7}}>Edit →</span>
+            </div>
+          ))}
+        </div>
+      )}
       {sec==="dropdowns"&&<div><p style={{fontSize:13,color:C.text2,marginBottom:14}}>Add or remove options from the Sports dropdown.</p><div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:12}}>{s.sportOptions.map(opt=><span key={opt} style={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:6,padding:"3px 10px",fontSize:12,display:"flex",alignItems:"center",gap:5,color:C.text}}>{opt}<button onClick={()=>removeOpt(opt)} style={{background:"none",border:"none",cursor:"pointer",color:C.danger,fontSize:13,lineHeight:1,padding:0}}>×</button></span>)}</div><div style={{display:"flex",gap:8}}><input id="new-opt" placeholder="Add new sport…" onChange={e=>newRef.current=e.target.value} style={{flex:1,padding:"8px 12px",borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,background:C.card2,color:C.text}}/><Btn onClick={addOpt} small>Add</Btn></div><div style={{display:"flex",gap:10,marginTop:18}}><Btn onClick={onClose} variant="secondary">Cancel</Btn><Btn onClick={()=>onSave(s)}>Save</Btn></div></div>}
-      {sec==="backup"&&<div><div style={{fontWeight:600,fontSize:14,color:C.text,marginBottom:6}}>Download backup</div><p style={{fontSize:13,color:C.text2,marginBottom:14}}>Save all your data as a .json file.</p><Btn onClick={download}>⬇ Download backup (.json)</Btn><div style={{marginTop:22,fontWeight:600,fontSize:14,color:C.text,marginBottom:6}}>Restore from backup</div><p style={{fontSize:13,color:C.text2,marginBottom:10}}>Load a previously saved backup.</p>          <input type="file" accept=".json" onChange={async e=>{const file=e.target.files[0];if(!file)return;const text=await file.text();try{const d=JSON.parse(text);if(window.confirm("Replace all data with backup?"))await handleRestore(s,d);}catch{alert("Invalid file.");}}} style={{fontSize:13,color:C.text2}}/></div>}
-      {sec==="info"&&<div><div style={{fontWeight:600,fontSize:14,color:C.text,marginBottom:8}}>How your data is saved</div><p style={{fontSize:13,color:C.text2,lineHeight:1.7,marginBottom:14}}>Saved automatically in this browser's localStorage. To use on another computer: download a backup, copy both the .json and this .html file, open the .html, then restore from backup.</p><div style={{background:C.card2,borderRadius:8,padding:"10px 14px",fontSize:12,fontFamily:"monospace",lineHeight:1.9,color:C.text2}}><div>sap-years, sap-summer-[year]</div><div>sap-activities, sap-settings</div></div></div>}
+      {sec==="backup"&&<div><div style={{fontWeight:600,fontSize:14,color:C.text,marginBottom:6}}>Download backup</div><p style={{fontSize:13,color:C.text2,marginBottom:14}}>Save all your data as a .json file.</p><Btn onClick={download}>⬇ Download backup (.json)</Btn><div style={{marginTop:22,fontWeight:600,fontSize:14,color:C.text,marginBottom:6}}>Restore from backup</div><p style={{fontSize:13,color:C.text2,marginBottom:10}}>Load a previously saved backup.</p><input type="file" accept=".json" onChange={async e=>{const file=e.target.files[0];if(!file)return;const text=await file.text();try{const d=JSON.parse(text);if(window.confirm("Replace all data?"))onSave(s,d);}catch{alert("Invalid file.");}}} style={{fontSize:13,color:C.text2}}/></div>}
+      {sec==="info"&&<div><div style={{fontWeight:600,fontSize:14,color:C.text,marginBottom:8}}>How your data is saved</div><p style={{fontSize:13,color:C.text2,lineHeight:1.7,marginBottom:14}}>All data saves to Supabase automatically and syncs across all devices.</p><div style={{background:C.card2,borderRadius:8,padding:"10px 14px",fontSize:12,fontFamily:"monospace",lineHeight:1.9,color:C.text2}}><div>sap-years, sap-summer-[year]</div><div>sap-activities, sap-settings, sap-kids</div></div></div>}
     </Modal>
   );
 }
@@ -1012,34 +1085,28 @@ function SettingsModal({settings,onSave,allData,onClose}){
 // ── Root App ──
 function App(){
   const [loading,setLoading]=useState(true);
-  const [page,setPage]=useState("home"); // home | activities | summer
+  const [page,setPage]=useState("home");
+  const [subPage,setSubPage]=useState(null);
+  const [selectedKidKey,setSelectedKidKey]=useState(null);
   const [activitiesTab,setActivitiesTab]=useState("calendar");
   const [years,setYears]=useState([2026]);
   const [activeYear,setActiveYear]=useState(2026);
-  const [yearData,setYearData]=useState({2026:{schedule:DEF_SCHED_2026,providers:DEF_PROVIDERS,weeks:DEF_WEEKS_2026,notes:""}});
+  const [yearData,setYearData]=useState({2026:{schedule:DEF_SCHED,providers:DEF_PROVIDERS,weeks:DEF_WEEKS,notes:""}});
   const [sports,setSports]=useState(DEF_SPORTS);
   const [conflicts,setConflicts]=useState([]);
   const [showSettings,setShowSettings]=useState(false);
   const [settings,setSettings]=useState({sportOptions:DEFAULT_SPORT_OPTIONS});
+  const [kids,setKids]=useState(KIDS_DEF);
 
   useEffect(()=>{
     async function load(){
       try{
-        const yl = await store.get(SK.years);
-        if(yl){
-          setYears(yl);
-          const data={};
-          for(const y of yl){
-            const r = await store.get(SK.year(y));
-            data[y]=r||{schedule:DEF_SCHED_2026,providers:DEF_PROVIDERS,weeks:DEF_WEEKS_2026,notes:""};
-          }
-          setYearData(data);
-        }
-        const acts = await store.get(SK.activities);
-        if(acts) setSports(acts);
-        const sett = await store.get(SK.settings);
-        if(sett) setSettings(sett);
-      }catch(e){ console.error("Load error:", e); }
+        const yl=await store.get(SK.years);
+        if(yl){setYears(yl);const data={};for(const y of yl){const r=await store.get(SK.year(y));data[y]=r||{schedule:DEF_SCHED,providers:DEF_PROVIDERS,weeks:DEF_WEEKS,notes:""};} setYearData(data);}
+        const acts=await store.get(SK.activities);if(acts)setSports(acts);
+        const sett=await store.get(SK.settings);if(sett)setSettings(sett);
+        const kds=await store.get(SK.kids);if(kds)setKids(kds);
+      }catch(e){console.error(e);}
       setLoading(false);
     }
     load();
@@ -1052,21 +1119,35 @@ function App(){
   }
   async function handleSettingsSave(newS,restoreData){
     setSettings(newS);await store.set(SK.settings,newS);
-    if(restoreData){
-      if(restoreData.sports){setSports(restoreData.sports);await store.set(SK.activities,restoreData.sports);}
-      if(restoreData.yearData) for(const [y,d] of Object.entries(restoreData.yearData)) await persistYear(Number(y),d);
-    }
+    if(restoreData){if(restoreData.sports){setSports(restoreData.sports);await store.set(SK.activities,restoreData.sports);}if(restoreData.yearData)for(const [y,d] of Object.entries(restoreData.yearData))await persistYear(Number(y),d);}
     setShowSettings(false);
   }
-  function navigate(pg,tab){setPage(pg);if(tab)setActivitiesTab(tab);}
+  async function saveKid(updatedKid){const updated=kids.map(k=>k.key===updatedKid.key?updatedKid:k);setKids(updated);await store.set(SK.kids,updated);}
 
-  const NAV=[
-    {k:"home",    icon:"⊞", label:"Home"},
-    {k:"activities",icon:"🎯",label:"Activities"},
-    {k:"summer",  icon:"☀️", label:"Summer"},
-  ];
+  function navigate(dest,param){
+    if(dest==="kids-dir"){setPage("home");setSubPage("kids-directory");setSelectedKidKey(null);}
+    else if(dest==="kid-profile"){setPage("home");setSubPage("kid-profile");setSelectedKidKey(param);}
+    else{setPage(dest);setSubPage(null);setSelectedKidKey(null);if(param)setActivitiesTab(param);}
+  }
 
-  if(loading)return <div style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh",flexDirection:"column",gap:12,background:C.bg}}><div style={{width:32,height:32,border:`3px solid ${C.border}`,borderTop:`3px solid ${C.accent}`,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/><div style={{color:C.text2,fontSize:14}}>Loading…</div><style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style></div>;
+  const NAV=[{k:"home",icon:"⊞",label:"Home"},{k:"activities",icon:"🎯",label:"Activities"},{k:"summer",icon:"☀️",label:"Summer"}];
+
+  if(loading)return(
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh",flexDirection:"column",gap:12,background:C.bg}}>
+      <div style={{width:32,height:32,border:`3px solid ${C.border}`,borderTop:`3px solid ${C.accent}`,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
+      <div style={{color:C.text2,fontSize:14}}>Loading…</div>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
+
+  const pageTitle={
+    home:{title:"Home",sub:"Your family at a glance"},
+    "kids-directory":{title:"Kids",sub:"Family profiles"},
+    "kid-profile":{title:kids.find(k=>k.key===selectedKidKey)?.name||"",sub:"Individual profile"},
+    activities:{title:"Activities",sub:"Extracurriculars, meets, and results"},
+    summer:{title:"Summer Schedule",sub:"Camp and program schedule by year"},
+  };
+  const currentTitle=subPage?pageTitle[subPage]||(pageTitle[page]||{}):pageTitle[page]||{};
 
   return(
     <div style={{display:"flex",minHeight:"100vh",background:C.bg}}>
@@ -1078,7 +1159,7 @@ function App(){
         </div>
         <div style={{padding:"10px 8px",flex:1}}>
           {NAV.map(n=>(
-            <button key={n.k} onClick={()=>navigate(n.k)} style={{width:"100%",textAlign:"left",padding:"10px 12px",borderRadius:8,border:"none",background:page===n.k?"#1E1B4B":"transparent",color:page===n.k?C.accent:C.text2,cursor:"pointer",fontSize:14,fontWeight:page===n.k?600:400,display:"flex",alignItems:"center",gap:10,marginBottom:3}}>
+            <button key={n.k} onClick={()=>navigate(n.k)} style={{width:"100%",textAlign:"left",padding:"10px 12px",borderRadius:8,border:"none",background:page===n.k&&!subPage?"#1E1B4B":"transparent",color:page===n.k&&!subPage?C.accent:C.text2,cursor:"pointer",fontSize:14,fontWeight:page===n.k&&!subPage?600:400,display:"flex",alignItems:"center",gap:10,marginBottom:3}}>
               <span style={{fontSize:16}}>{n.icon}</span>{n.label}
             </button>
           ))}
@@ -1086,16 +1167,14 @@ function App(){
         <div style={{padding:"12px 8px 20px",borderTop:`1px solid ${C.border}`}}>
           <div style={{padding:"12px",background:C.card2,borderRadius:10,border:`1px solid ${C.border}`,marginBottom:10}}>
             <div style={{fontSize:11,color:C.text3,marginBottom:8,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.05em"}}>Family</div>
-            {KIDS.map(k=>(
-              <div key={k.key} style={{display:"flex",alignItems:"center",gap:8,marginBottom:7}}>
-                <KidAvatar kidKey={k.key} size={26}/>
+            {kids.map(k=>(
+              <div key={k.key} onClick={()=>navigate("kid-profile",k.key)} style={{display:"flex",alignItems:"center",gap:8,marginBottom:7,cursor:"pointer",borderRadius:6,padding:"3px 4px"}} onMouseEnter={e=>e.currentTarget.style.background=C.card} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <KidAvatar kid={k} size={26}/>
                 <div><div style={{fontSize:12,fontWeight:600,color:C.text,lineHeight:1.2}}>{k.name}</div><div style={{fontSize:10,color:C.text3}}>Age {ageAsOf(k.dob,"2026-06-22")}</div></div>
               </div>
             ))}
           </div>
-          <button onClick={()=>setShowSettings(true)} style={{width:"100%",padding:"9px 12px",borderRadius:8,border:`1px solid ${C.border}`,background:C.card2,color:C.text2,cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",gap:8}}>
-            ⚙ Settings
-          </button>
+          <button onClick={()=>setShowSettings(true)} style={{width:"100%",padding:"9px 12px",borderRadius:8,border:`1px solid ${C.border}`,background:C.card2,color:C.text2,cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",gap:8}}>⚙ Settings</button>
         </div>
       </div>
 
@@ -1103,32 +1182,27 @@ function App(){
       <div style={{flex:1,overflowY:"auto",maxHeight:"100vh"}}>
         <div style={{maxWidth:860,margin:"0 auto",padding:"22px 20px 40px"}}>
           {/* Breadcrumb */}
-          {page!=="home"&&(
+          {(page!=="home"||subPage)&&(
             <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:16,fontSize:13,color:C.text3}}>
-              <button onClick={()=>setPage("home")} style={{background:"none",border:"none",cursor:"pointer",color:C.accent,fontSize:13,padding:0}}>Home</button>
-              <span>›</span>
-              <span style={{color:C.text2}}>{page==="activities"?"Activities":"Summer Schedule"}</span>
+              <button onClick={()=>navigate("home")} style={{background:"none",border:"none",cursor:"pointer",color:C.accent,fontSize:13,padding:0}}>Home</button>
+              {subPage==="kid-profile"&&<><span>›</span><button onClick={()=>navigate("kids-dir")} style={{background:"none",border:"none",cursor:"pointer",color:C.accent,fontSize:13,padding:0}}>Kids</button></>}
+              {(subPage||page!=="home")&&<><span>›</span><span style={{color:C.text2}}>{currentTitle.title}</span></>}
             </div>
           )}
           <div style={{marginBottom:20}}>
-            <h1 style={{fontSize:22,fontWeight:700,color:C.text,marginBottom:2}}>
-              {page==="home"&&"Home"}
-              {page==="activities"&&"🎯 Activities"}
-              {page==="summer"&&"☀️ Summer Schedule"}
-            </h1>
-            <div style={{fontSize:13,color:C.text2}}>
-              {page==="home"&&"Your family at a glance"}
-              {page==="activities"&&"Extracurriculars, meets, and results"}
-              {page==="summer"&&"Camp and program schedule by year"}
-            </div>
+            <h1 style={{fontSize:22,fontWeight:700,color:C.text,marginBottom:2}}>{currentTitle.title}</h1>
+            <div style={{fontSize:13,color:C.text2}}>{currentTitle.sub}</div>
           </div>
-          {page==="home"&&<Dashboard sports={sports} summerData={yearData[activeYear]} conflicts={conflicts} onNavigate={navigate}/>}
-          {page==="activities"&&<ActivitiesPage sports={sports} setSports={setSports} conflicts={conflicts} setConflicts={setConflicts} summerData={yearData[activeYear]} settings={settings} initialTab={activitiesTab}/>}
-          {page==="summer"&&<SummerSection yearData={yearData} years={years} activeYear={activeYear} setActiveYear={setActiveYear} onYearDataChange={persistYear}/>}
+
+          {page==="home"&&!subPage&&<Dashboard sports={sports} summerData={yearData[activeYear]} conflicts={conflicts} kids={kids} onNavigate={navigate}/>}
+          {page==="home"&&subPage==="kids-directory"&&<KidsDirectoryPage kids={kids} sports={sports} onSelectKid={k=>navigate("kid-profile",k)} onBack={()=>navigate("home")}/>}
+          {page==="home"&&subPage==="kid-profile"&&<KidProfilePage kidKey={selectedKidKey} kids={kids} sports={sports} yearData={yearData} years={years} onBack={()=>navigate("kids-dir")}/>}
+          {page==="activities"&&<ActivitiesPage sports={sports} setSports={setSports} conflicts={conflicts} setConflicts={setConflicts} summerData={yearData[activeYear]} settings={settings} initialTab={activitiesTab} kids={kids} onKidClick={k=>navigate("kid-profile",k)}/>}
+          {page==="summer"&&<SummerSection yearData={yearData} years={years} activeYear={activeYear} setActiveYear={setActiveYear} onYearDataChange={persistYear} kids={kids}/>}
         </div>
       </div>
 
-      {showSettings&&<SettingsModal settings={settings} onSave={handleSettingsSave} allData={{sports,yearData,settings,years}} onClose={()=>setShowSettings(false)}/>}
+      {showSettings&&<SettingsModal settings={settings} onSave={handleSettingsSave} allData={{sports,yearData,settings,years,kids}} onClose={()=>setShowSettings(false)} kids={kids} onSaveKid={saveKid}/>}
     </div>
   );
 }
