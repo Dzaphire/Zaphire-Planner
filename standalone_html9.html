@@ -1,0 +1,1139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Zaphire Family Planner</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.development.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.development.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,sans-serif;background:#0F1117;color:#E2E8F0;min-height:100vh}
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:#1A1D27}::-webkit-scrollbar-thumb{background:#374151;border-radius:4px}
+input,select,textarea{font-family:inherit}
+input::placeholder,textarea::placeholder{color:#4A5568}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useRef,useMemo}=React;
+
+// ── Supabase ──
+const SUPABASE_URL = "https://ttdioqltjmgalnbkapzi.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR0ZGlvcWx0am1nYWxuYmthcHppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk4MzU1NjksImV4cCI6MjA5NTQxMTU2OX0.KW5DDiC2FUFMFG7BPH87aFp-alarJijx-aGiHwfUW_I";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ── Storage (Supabase-backed, with localStorage fallback) ──
+const SK={years:"sap-years",year:y=>`sap-summer-${y}`,activities:"sap-activities",settings:"sap-settings"};
+const store={
+  get: async (k) => {
+    try {
+      const { data, error } = await sb.from("app_data").select("value").eq("key", k).single();
+      if (error || !data) return null;
+      return data.value;
+    } catch { return null; }
+  },
+  set: async (k, v) => {
+    try {
+      await sb.from("app_data").upsert({ key: k, value: v, updated_at: new Date().toISOString() });
+    } catch (e) { console.error("Save error:", e); }
+  },
+};
+
+// ── Design tokens ──
+const C={
+  bg:"#0F1117",card:"#1A1D27",card2:"#222536",card3:"#161926",
+  border:"#2D3748",border2:"#374151",
+  text:"#E2E8F0",text2:"#94A3B8",text3:"#4A5568",
+  accent:"#6366F1",success:"#10B981",warning:"#F59E0B",danger:"#EF4444",
+};
+
+// ── Constants ──
+const KIDS=[
+  {key:"shay",      name:"Shay",     dob:"2017-12-01",initials:"SH",color:"#A78BFA",bg:"#2D1F4E",light:"#C4B5FD"},
+  {key:"christian", name:"Christian",dob:"2015-02-01",initials:"CH",color:"#38BDF8",bg:"#0C2340",light:"#7DD3FC"},
+  {key:"aurora",    name:"Aurora",   dob:"2015-02-01",initials:"AU",color:"#F472B6",bg:"#3D1535",light:"#F9A8D4"},
+  {key:"sadie",     name:"Sadie",    dob:"2023-07-01",initials:"SA",color:"#FBBF24",bg:"#3D2A05",light:"#FCD34D"},
+];
+const DAYS=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
+const SPORT_COLORS={
+  "Track & Field":{bg:"#2D1A0A",txt:"#FB923C",border:"#7C3208"},
+  "Swimming":     {bg:"#0A1F35",txt:"#38BDF8",border:"#0C4A6E"},
+  "Golf":         {bg:"#0A2010",txt:"#4ADE80",border:"#14532D"},
+  "Gymnastics":   {bg:"#220A35",txt:"#C084FC",border:"#6B21A8"},
+  "Pickleball":   {bg:"#2D2005",txt:"#FCD34D",border:"#78350F"},
+  "Cooking":      {bg:"#2D0A0A",txt:"#FCA5A5",border:"#7F1D1D"},
+  "Soccer":       {bg:"#0A2D1A",txt:"#6EE7B7",border:"#065F46"},
+  "Tennis":       {bg:"#2D2A05",txt:"#FDE68A",border:"#78350F"},
+  "Dance":        {bg:"#2D0A1F",txt:"#F9A8D4",border:"#831843"},
+};
+const getSC=n=>SPORT_COLORS[n]||{bg:"#1A1D27",txt:"#94A3B8",border:"#374151"};
+const SUMMER_COLORS={
+  "JCC":                   {bg:"#0A1F35",txt:"#60A5FA",border:"#1E40AF"},
+  "Hudson Table":          {bg:"#2D1A05",txt:"#FCD34D",border:"#78350F"},
+  "Stamford Nature Center":{bg:"#0A2010",txt:"#4ADE80",border:"#14532D"},
+  "Twin Rinks":            {bg:"#1A0A2D",txt:"#C084FC",border:"#6B21A8"},
+  "Unscheduled":           {bg:"#1A1D27",txt:"#4A5568",border:"#2D3748"},
+};
+const getTC=n=>SUMMER_COLORS[n]||{bg:"#2D0A1A",txt:"#F472B6",border:"#831843"};
+const DEFAULT_SPORT_OPTIONS=["Track & Field","Swimming","Golf","Gymnastics","Pickleball","Cooking","Soccer","Tennis","Basketball","Dance","Other"];
+
+function ageAsOf(dob,ref){const b=new Date(dob),r=new Date(ref);let a=r.getFullYear()-b.getFullYear();const m=r.getMonth()-b.getMonth();if(m<0||(m===0&&r.getDate()<b.getDate()))a--;return a;}
+function fmtDate(d){if(!d)return"";try{return new Date(d+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});}catch{return d;}}
+function fmtMoney(n){return"$"+Number(n||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});}
+
+// ── Default data ──
+const DEF_SCHED_2026={
+  shay:[{a:"JCC",note:"Tzofim | Foam party",cost:""},{a:"JCC",note:"Tzofim | Boat Trip",cost:""},{a:"JCC",note:"Tzofim | Beardsley Zoo",cost:""},{a:"Hudson Table",note:"Baking Techniques",cost:"$656.50"},{a:"JCC",note:"Tzofim | Medieval Times",cost:""},{a:"JCC",note:"Tzofim | Great Wolf Lodge",cost:""},{a:"JCC",note:"Tzofim | Lake Compounce",cost:""},{a:"Unscheduled",note:"",cost:""}],
+  christian:[{a:"JCC",note:"Na'arim | Maritime Aquarium",cost:""},{a:"JCC",note:"Na'arim",cost:""},{a:"JCC",note:"Na'arim | Family Late Night",cost:""},{a:"JCC",note:"Na'arim | Color War",cost:""},{a:"JCC",note:"Na'arim | Medieval Times",cost:""},{a:"JCC",note:"Na'arim | Great Wolf Lodge",cost:""},{a:"Stamford Nature Center",note:"Vet School 101",cost:"$460.00"},{a:"Unscheduled",note:"",cost:""}],
+  aurora:[{a:"Hudson Table",note:"Culinary Techniques",cost:"$650.00"},{a:"JCC",note:"Na'arim | Maritime Aquarium",cost:""},{a:"JCC",note:"Na'arim | Family Late Night",cost:""},{a:"Hudson Table",note:"Baking Techniques",cost:"$663.00"},{a:"JCC",note:"Na'arim | Medieval Times",cost:""},{a:"Stamford Nature Center",note:"Mythical Menagerie",cost:"$460.00"},{a:"JCC",note:"Na'arim | Lake Compounce",cost:""},{a:"Unscheduled",note:"",cost:""}],
+  sadie:Array(8).fill(null).map(()=>({a:"Unscheduled",note:"",cost:""})),
+};
+const DEF_WEEKS_2026=[{n:1,label:"Week 1",dates:"June 22–26"},{n:2,label:"Week 2",dates:"June 29–July 3"},{n:3,label:"Week 3",dates:"July 6–10"},{n:4,label:"Week 4",dates:"July 13–17"},{n:5,label:"Week 5",dates:"July 20–24"},{n:6,label:"Week 6",dates:"July 27–31"},{n:7,label:"Week 7",dates:"Aug 3–7"},{n:8,label:"Week 8",dates:"Aug 10–14"}];
+const DEF_PROVIDERS=[
+  {id:"jcc",name:"JCC",url:"https://daycampsatthej.org",hours:"9am–4pm",location:"1035 Newfield Ave, Stamford CT",phone:"203.487.0994",notes:"Tzofim (Shay), Na'arim (Twins). Sibling discounts.",sessions:[{name:"Full summer",ageMin:5,ageMax:16,dates:"June 22–Aug 14",cost:null,costNote:"varies",description:"Full-day traditional day camp."}]},
+  {id:"hudson",name:"Hudson Table",url:"https://hudsontable.com/stamford/kids-summer-classes/",hours:"10am–3pm",location:"44 John St, Stamford CT",phone:"",notes:"100% nut-free. Forms due June 15.",sessions:[{name:"Culinary Techniques",ageMin:8,ageMax:14,dates:"June 22–26",cost:650,costNote:"+ fee",description:"Sautéing, pasta, sauce-making."},{name:"Baking Techniques",ageMin:8,ageMax:14,dates:"July 13–17",cost:650,costNote:"+ fee",description:"Bread, pastries, desserts."}]},
+  {id:"stamford",name:"Stamford Nature Center",url:"https://www.stamfordmuseum.org/child-youth/camp-programs/explorers-full-day-camp/",hours:"9am–3pm",location:"39 Scofieldtown Rd, Stamford CT",phone:"203.977.6568",notes:"Member pricing. 14 campers/session.",sessions:[{name:"Mythical Menagerie",ageMin:8,ageMax:13,dates:"July 27–31",cost:460,costNote:"member",description:"Creatures from myth."},{name:"Vet School 101",ageMin:8,ageMax:13,dates:"Aug 3–7",cost:460,costNote:"member",description:"Farm animal care."}]},
+  {id:"rinks",name:"Twin Rinks",url:"https://stamfordtwinrinks.com/summer-skating-camp-2026/",hours:"9am–1pm",location:"1063 Hope St, Stamford CT",phone:"203-968-9000 x16",notes:"Rental skates included.",sessions:[{name:"Learn to Skate Camp",ageMin:5,ageMax:14,dates:"July 13–Aug 26",cost:500,costNote:"/week",description:"Beginner skating."}]},
+];
+const DEF_SPORTS=[
+  {id:"track1",name:"Track & Field",kidKey:"christian",teamName:"Stamford Track Club",coach:"",location:"Stamford HS Track",phone:"",website:"",notes:"",sessions:[{id:"ts1",name:"Spring 2026",start:"2026-03-01",end:"2026-06-15",cost:200,practiceDays:["Tue","Thu"],practiceTime:"4:00 PM",practiceLocation:"Stamford HS Track",enrolled:true,meets:[{id:"tm1",dateStart:"2026-04-12",dateEnd:"2026-04-12",name:"Fairfield County Invitational",location:"Brien McMahon HS, Norwalk CT",time:"9:00 AM",attending:true,results:[{kidKey:"christian",event:"400m",time:"62.4s",place:"3rd",notes:"PR"}]},{id:"tm2",dateStart:"2026-05-10",dateEnd:"2026-05-10",name:"FCIAC Championships",location:"Wilton HS",time:"10:00 AM",attending:true,results:[]}]}]},
+  {id:"swim1",name:"Swimming",kidKey:"christian",teamName:"Stamford Seals",coach:"Coach Mike",location:"Stamford YMCA",phone:"",website:"",notes:"",sessions:[{id:"ss1",name:"Spring 2026",start:"2026-03-20",end:"2026-06-30",cost:350,practiceDays:["Mon","Wed","Fri"],practiceTime:"5:30 PM",practiceLocation:"Stamford YMCA",enrolled:true,meets:[{id:"sm1",dateStart:"2026-05-10",dateEnd:"2026-05-10",name:"Spring Invitational",location:"Greenwich YMCA",time:"8:00 AM",attending:true,results:[{kidKey:"christian",event:"100m Freestyle",time:"1:12.3",place:"2nd",notes:""}]}]}]},
+  {id:"swim2",name:"Swimming",kidKey:"shay",teamName:"Stamford Seals",coach:"Coach Mike",location:"Stamford YMCA",phone:"",website:"",notes:"",sessions:[{id:"ss2",name:"Spring 2026",start:"2026-03-20",end:"2026-06-30",cost:280,practiceDays:["Tue","Thu"],practiceTime:"4:30 PM",practiceLocation:"Stamford YMCA",enrolled:true,meets:[]}]},
+  {id:"golf1",name:"Golf",kidKey:"shay",teamName:"Sterling Farms Golf",coach:"",location:"Sterling Farms GC",phone:"",website:"",notes:"",sessions:[{id:"gs1",name:"Summer 2026",start:"2026-06-01",end:"2026-08-31",cost:400,practiceDays:["Sat"],practiceTime:"9:00 AM",practiceLocation:"Sterling Farms GC",enrolled:true,meets:[]}]},
+  {id:"golf2",name:"Golf",kidKey:"aurora",teamName:"Sterling Farms Golf",coach:"",location:"Sterling Farms GC",phone:"",website:"",notes:"",sessions:[{id:"gs2",name:"Summer 2026",start:"2026-06-01",end:"2026-08-31",cost:400,practiceDays:["Sat"],practiceTime:"9:00 AM",practiceLocation:"Sterling Farms GC",enrolled:true,meets:[]}]},
+  {id:"pickle1",name:"Pickleball",kidKey:"aurora",teamName:"Stamford Rec",coach:"",location:"Scalzi Park",phone:"",website:"",notes:"",sessions:[{id:"ps1",name:"Spring/Summer 2026",start:"2026-04-01",end:"2026-08-15",cost:150,practiceDays:["Wed"],practiceTime:"4:00 PM",practiceLocation:"Scalzi Park",enrolled:true,meets:[]}]},
+  {id:"cook1",name:"Cooking",kidKey:"aurora",teamName:"Hudson Table",coach:"",location:"44 John St, Stamford",phone:"",website:"https://hudsontable.com/stamford/kids-classes/",notes:"Ongoing kids cooking classes",sessions:[{id:"cs1",name:"Spring 2026",start:"2026-04-01",end:"2026-06-30",cost:120,practiceDays:["Sat"],practiceTime:"10:00 AM",practiceLocation:"Hudson Table",enrolled:true,meets:[]}]},
+  {id:"gym1",name:"Gymnastics",kidKey:"shay",teamName:"TBD",coach:"",location:"TBD",phone:"",website:"",notes:"Shay wants gymnastics — program TBD",sessions:[]},
+];
+
+// ── UI Primitives ──
+function F({label,children}){return <div style={{marginBottom:13}}><label style={{fontSize:12,fontWeight:500,color:C.text2,display:"block",marginBottom:5}}>{label}</label>{children}</div>;}
+function Inp({value,onChange,placeholder,type="text"}){return <input type={type} value={value||""} onChange={e=>onChange(e.target.value)} placeholder={placeholder||""} style={{width:"100%",padding:"8px 12px",borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,background:C.card2,color:C.text}}/>;}
+function Sel({value,onChange,options}){return <select value={value} onChange={e=>onChange(e.target.value)} style={{width:"100%",padding:"8px 12px",borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,background:C.card2,color:C.text}}>{options.map(o=><option key={o.value||o} value={o.value||o}>{o.label||o}</option>)}</select>;}
+function Btn({onClick,children,variant="primary",small,full}){
+  const s={primary:{background:C.accent,color:"#fff",border:"none"},secondary:{background:C.card2,color:C.text,border:`1px solid ${C.border}`},danger:{background:"#2D0A0A",color:"#FCA5A5",border:"1px solid #7F1D1D"},ghost:{background:"transparent",color:C.text2,border:`1px solid ${C.border}`}};
+  return <button onClick={onClick} style={{...s[variant]||s.primary,padding:small?"4px 12px":"9px 18px",borderRadius:8,cursor:"pointer",fontSize:small?12:13,fontWeight:500,width:full?"100%":"auto"}}>{children}</button>;
+}
+function Modal({title,onClose,children,wide}){
+  return(
+    <div style={{position:"fixed",top:0,left:0,width:"100vw",height:"100vh",background:"rgba(0,0,0,0.85)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:99999}}>
+      <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:28,width:"100%",maxWidth:wide?560:440,maxHeight:"88vh",overflowY:"auto",margin:"0 16px",boxShadow:"0 25px 60px rgba(0,0,0,0.7)"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+          <span style={{fontWeight:600,fontSize:17,color:C.text}}>{title}</span>
+          <button onClick={onClose} style={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:"50%",width:32,height:32,fontSize:18,cursor:"pointer",color:C.text2,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function KidAvatar({kidKey,size=32}){
+  const k=KIDS.find(x=>x.key===kidKey)||KIDS[0];
+  return <div style={{width:size,height:size,borderRadius:"50%",background:k.bg,border:`2px solid ${k.color}`,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:size*0.35,color:k.color,flexShrink:0}}>{k.initials}</div>;
+}
+function SportPill({name,small}){const c=getSC(name);return <span style={{background:c.bg,color:c.txt,border:`1px solid ${c.border}`,borderRadius:5,padding:small?"1px 7px":"3px 9px",fontSize:small?11:12,fontWeight:500,whiteSpace:"nowrap"}}>{name}</span>;}
+function KidPill({kidKey,small}){const k=KIDS.find(x=>x.key===kidKey)||KIDS[0];return <span style={{background:k.bg,color:k.color,borderRadius:5,padding:small?"1px 7px":"3px 9px",fontSize:small?11:12,fontWeight:500}}>{k.name}</span>;}
+
+// ── Sport/Session/Meet Modals ──
+function SportModal({sport,sportOptions,onSave,onClose}){
+  const blank={id:Date.now()+"",name:"",otherName:"",kidKey:"christian",teamName:"",coach:"",location:"",phone:"",website:"",notes:"",sessions:[]};
+  const [s,setS]=useState(sport?{...sport,otherName:sport.otherName||""}:blank);
+  const isOther=s.name==="Other";
+  return(
+    <Modal title={sport?"Edit activity":"Add activity"} onClose={onClose} wide>
+      <F label="Sport / Activity"><Sel value={s.name} onChange={v=>setS({...s,name:v})} options={sportOptions}/></F>
+      {isOther&&<F label="Specify activity"><Inp value={s.otherName} onChange={v=>setS({...s,otherName:v})} placeholder="e.g. Fencing…"/></F>}
+      <F label="Child"><Sel value={s.kidKey} onChange={v=>setS({...s,kidKey:v})} options={KIDS.map(k=>({value:k.key,label:k.name}))}/></F>
+      <F label="Team / Program name"><Inp value={s.teamName} onChange={v=>setS({...s,teamName:v})}/></F>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <F label="Coach"><Inp value={s.coach} onChange={v=>setS({...s,coach:v})}/></F>
+        <F label="Phone"><Inp value={s.phone} onChange={v=>setS({...s,phone:v})}/></F>
+      </div>
+      <F label="Location"><Inp value={s.location} onChange={v=>setS({...s,location:v})}/></F>
+      <F label="Website"><Inp value={s.website} onChange={v=>setS({...s,website:v})} placeholder="https://…"/></F>
+      <F label="Notes"><textarea value={s.notes||""} onChange={e=>setS({...s,notes:e.target.value})} rows={2} style={{width:"100%",padding:"8px 12px",borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,background:C.card2,color:C.text,resize:"vertical"}}/></F>
+      <div style={{display:"flex",gap:10,marginTop:10}}><Btn onClick={onClose} variant="secondary">Cancel</Btn><Btn onClick={()=>onSave({...s,name:isOther&&s.otherName?s.otherName:s.name})}>Save</Btn></div>
+    </Modal>
+  );
+}
+function SessionModal({session,onSave,onClose}){
+  const blank={id:Date.now()+"",name:"",start:"",end:"",cost:"",practiceDays:[],practiceTime:"",practiceLocation:"",enrolled:true,meets:[]};
+  const [s,setS]=useState(session||blank);
+  const tog=d=>setS({...s,practiceDays:s.practiceDays.includes(d)?s.practiceDays.filter(x=>x!==d):[...s.practiceDays,d]});
+  return(
+    <Modal title={session?"Edit session":"Add session"} onClose={onClose} wide>
+      <F label="Session name"><Inp value={s.name} onChange={v=>setS({...s,name:v})} placeholder="e.g. Spring 2026"/></F>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <F label="Start date"><Inp type="date" value={s.start} onChange={v=>setS({...s,start:v})}/></F>
+        <F label="End date"><Inp type="date" value={s.end} onChange={v=>setS({...s,end:v})}/></F>
+      </div>
+      <F label="Cost ($)"><Inp type="number" value={s.cost} onChange={v=>setS({...s,cost:v})}/></F>
+      <F label="Practice days">
+        <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+          {DAYS.map(d=><button key={d} onClick={()=>tog(d)} style={{padding:"4px 10px",borderRadius:6,border:`1px solid ${s.practiceDays.includes(d)?C.accent:C.border}`,background:s.practiceDays.includes(d)?C.accent:C.card2,color:s.practiceDays.includes(d)?"#fff":C.text2,cursor:"pointer",fontSize:12}}>{d}</button>)}
+        </div>
+      </F>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <F label="Practice time"><Inp value={s.practiceTime} onChange={v=>setS({...s,practiceTime:v})} placeholder="4:00 PM"/></F>
+        <F label="Practice location"><Inp value={s.practiceLocation} onChange={v=>setS({...s,practiceLocation:v})}/></F>
+      </div>
+      <F label="Enrollment">
+        <div style={{display:"flex",gap:8}}>
+          {[true,false].map(b=><button key={String(b)} onClick={()=>setS({...s,enrolled:b})} style={{padding:"6px 16px",borderRadius:7,border:`1px solid ${s.enrolled===b?C.accent:C.border}`,background:s.enrolled===b?C.accent:C.card2,color:s.enrolled===b?"#fff":C.text2,cursor:"pointer",fontSize:13}}>{b?"Enrolled":"Reference only"}</button>)}
+        </div>
+      </F>
+      <div style={{display:"flex",gap:10,marginTop:10}}><Btn onClick={onClose} variant="secondary">Cancel</Btn><Btn onClick={()=>onSave(s)}>Save session</Btn></div>
+    </Modal>
+  );
+}
+function MeetModal({meet,kidKey,onSave,onClose}){
+  const blank={id:Date.now()+"",dateStart:"",dateEnd:"",name:"",location:"",time:"",attending:true,results:[]};
+  const [m,setM]=useState(meet?{...meet,dateStart:meet.dateStart||meet.date||"",dateEnd:meet.dateEnd||meet.date||""}:blank);
+  const [results,setResults]=useState(meet?[...meet.results]:[]);
+  const [showR,setShowR]=useState(false);
+  const [nr,setNr]=useState({kidKey:kidKey||"christian",event:"",time:"",place:"",notes:""});
+  return(
+    <Modal title={meet?"Edit meet":"Add meet / event"} onClose={onClose} wide>
+      <F label="Event name"><Inp value={m.name} onChange={v=>setM({...m,name:v})} placeholder="e.g. FCIAC Championships"/></F>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <F label="Start date"><Inp type="date" value={m.dateStart} onChange={v=>setM({...m,dateStart:v})}/></F>
+        <F label="End date (multi-day)"><Inp type="date" value={m.dateEnd} onChange={v=>setM({...m,dateEnd:v})}/></F>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <F label="Time"><Inp value={m.time} onChange={v=>setM({...m,time:v})} placeholder="9:00 AM"/></F>
+        <F label="Location"><Inp value={m.location} onChange={v=>setM({...m,location:v})}/></F>
+      </div>
+      <F label="Attending">
+        <div style={{display:"flex",gap:8}}>
+          {[true,false].map(b=><button key={String(b)} onClick={()=>setM({...m,attending:b})} style={{padding:"6px 16px",borderRadius:7,border:`1px solid ${m.attending===b?C.accent:C.border}`,background:m.attending===b?C.accent:C.card2,color:m.attending===b?"#fff":C.text2,cursor:"pointer",fontSize:13}}>{b?"Yes":"Not attending"}</button>)}
+        </div>
+      </F>
+      <div style={{fontWeight:500,fontSize:13,color:C.text,marginBottom:8}}>Results</div>
+      {results.map((r,ri)=>(
+        <div key={ri} style={{background:C.card2,borderRadius:8,padding:"7px 12px",marginBottom:6,display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:12}}>
+          <span style={{color:C.text}}><KidPill kidKey={r.kidKey} small/> <b>{r.event}</b> — {r.time} · {r.place}{r.notes?` · ${r.notes}`:""}</span>
+          <button onClick={()=>setResults(results.filter((_,i)=>i!==ri))} style={{background:"none",border:"none",cursor:"pointer",color:C.danger,fontSize:14,marginLeft:8}}>×</button>
+        </div>
+      ))}
+      {showR?(
+        <div style={{background:"#0C2340",borderRadius:8,padding:12,marginBottom:10,border:`1px solid ${C.border}`}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+            <F label="Athlete"><Sel value={nr.kidKey} onChange={v=>setNr({...nr,kidKey:v})} options={KIDS.map(k=>({value:k.key,label:k.name}))}/></F>
+            <F label="Event"><Inp value={nr.event} onChange={v=>setNr({...nr,event:v})} placeholder="400m"/></F>
+            <F label="Time / Score"><Inp value={nr.time} onChange={v=>setNr({...nr,time:v})} placeholder="62.4s"/></F>
+            <F label="Place"><Inp value={nr.place} onChange={v=>setNr({...nr,place:v})} placeholder="1st"/></F>
+          </div>
+          <F label="Notes"><Inp value={nr.notes} onChange={v=>setNr({...nr,notes:v})} placeholder="PR, DQ…"/></F>
+          <div style={{display:"flex",gap:8,marginTop:6}}>
+            <Btn onClick={()=>{setResults([...results,{...nr}]);setNr({kidKey:kidKey||"christian",event:"",time:"",place:"",notes:""});setShowR(false);}} small>Add</Btn>
+            <Btn onClick={()=>setShowR(false)} variant="secondary" small>Cancel</Btn>
+          </div>
+        </div>
+      ):(
+        <button onClick={()=>setShowR(true)} style={{width:"100%",padding:"7px",borderRadius:8,border:`1px dashed ${C.border}`,background:"transparent",cursor:"pointer",fontSize:12,color:C.text3,marginBottom:10}}>+ Add result</button>
+      )}
+      <div style={{display:"flex",gap:10,marginTop:10}}><Btn onClick={onClose} variant="secondary">Cancel</Btn><Btn onClick={()=>onSave({...m,results})}>Save meet</Btn></div>
+    </Modal>
+  );
+}
+
+// ── Calendar ──
+function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClick}){
+  const today=new Date();
+  const [viewMode,setViewMode]=useState("month");
+  const [curDate,setCurDate]=useState(new Date(2026,5,1));
+
+  const events=[];
+  if(showEC){
+    sports.forEach(sp=>{
+      const sc=getSC(sp.name);
+      sp.sessions.forEach(sess=>{
+        if(!sess.enrolled)return;
+        const start=new Date(sess.start),end=new Date(sess.end);
+        const cur=new Date(start);
+        while(cur<=end){
+          if(DAYS[cur.getDay()]&&sess.practiceDays.includes(DAYS[cur.getDay()]))
+            events.push({date:cur.toISOString().slice(0,10),type:"practice",label:sp.name,sub:sess.practiceTime,kidKey:sp.kidKey,color:sc.txt,bg:sc.bg,border:sc.border,sportId:sp.id,sessionId:sess.id,meetId:null});
+          cur.setDate(cur.getDate()+1);
+        }
+        sess.meets.forEach(m=>{
+          const conf=conflicts.find(c=>c.kidKey===sp.kidKey&&c.date===(m.dateStart||m.date));
+          const notAtt=conf&&conf.chosen&&conf.chosen!==m.id;
+          events.push({date:m.dateStart||m.date||"",type:"meet",label:m.name,sub:`${m.time} · ${m.location}`,kidKey:sp.kidKey,color:notAtt?C.text3:sc.txt,bg:notAtt?C.card2:sc.bg,border:notAtt?C.border:sc.border,notAttending:notAtt,sportId:sp.id,sessionId:sess.id,meetId:m.id,isMultiDay:m.dateEnd&&m.dateEnd!==m.dateStart});
+        });
+      });
+    });
+  }
+  if(showSummer&&summerData){
+    summerData.weeks.forEach((wk,wi)=>{
+      KIDS.forEach(k=>{
+        const s=summerData.schedule[k.key]?.[wi];
+        if(!s||s.a==="Unscheduled")return;
+        const c=getTC(s.a);
+        events.push({date:new Date(2026,5,22+wi*7).toISOString().slice(0,10),type:"summer",label:s.a,sub:wk.dates,kidKey:k.key,color:c.txt,bg:c.bg,border:c.border,sportId:null});
+      });
+    });
+  }
+
+  const evOn=d=>events.filter(e=>e.date===d);
+  const icon=t=>t==="meet"?"★":t==="practice"?"▸":"☀";
+
+  function VToggle(){
+    return <div style={{display:"flex",gap:4}}>{["day","week","month"].map(v=><button key={v} onClick={()=>setViewMode(v)} style={{padding:"5px 12px",borderRadius:7,border:`1px solid ${viewMode===v?C.accent:C.border}`,background:viewMode===v?C.accent:C.card2,color:viewMode===v?"#fff":C.text2,cursor:"pointer",fontSize:12,textTransform:"capitalize"}}>{v}</button>)}</div>;
+  }
+  function EPill({ev,compact}){
+    return <div onClick={()=>onEventClick(ev)} title={ev.label} style={{background:ev.bg,color:ev.color,border:`1px solid ${ev.border}`,borderRadius:4,padding:compact?"1px 4px":"3px 7px",fontSize:compact?10:11,fontWeight:500,marginBottom:2,cursor:"pointer",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",opacity:ev.notAttending?0.4:1}}>{icon(ev.type)} {ev.label}</div>;
+  }
+
+  if(viewMode==="month"){
+    const yr=curDate.getFullYear(),mo=curDate.getMonth();
+    const first=new Date(yr,mo,1).getDay(),dim=new Date(yr,mo+1,0).getDate();
+    const cells=[];for(let i=0;i<first;i++)cells.push(null);for(let d=1;d<=dim;d++)cells.push(d);
+    return(
+      <div>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+          <div style={{display:"flex",gap:6,alignItems:"center"}}>
+            <button onClick={()=>setCurDate(new Date(yr,mo-1,1))} style={{padding:"5px 11px",borderRadius:7,border:`1px solid ${C.border}`,background:C.card2,cursor:"pointer",fontSize:14,color:C.text}}>‹</button>
+            <span style={{fontWeight:600,fontSize:15,color:C.text}}>{MONTHS[mo]} {yr}</span>
+            <button onClick={()=>setCurDate(new Date(yr,mo+1,1))} style={{padding:"5px 11px",borderRadius:7,border:`1px solid ${C.border}`,background:C.card2,cursor:"pointer",fontSize:14,color:C.text}}>›</button>
+          </div>
+          <VToggle/>
+        </div>
+        <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:"hidden"}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)"}}>
+            {DAYS.map((d,i)=><div key={d} style={{textAlign:"center",fontSize:11,fontWeight:600,color:C.text2,padding:"8px 0",background:C.card3,borderRight:i<6?`1px solid ${C.border}`:"none"}}>{d}</div>)}
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)"}}>
+            {cells.map((d,i)=>{
+              if(!d)return <div key={i} style={{minHeight:80,background:"#13151F",borderRight:i%7<6?`1px solid ${C.border}`:"none",borderTop:`1px solid ${C.border}`}}/>;
+              const ds=`${yr}-${String(mo+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+              const evs=evOn(ds);
+              const isToday=today.getDate()===d&&today.getMonth()===mo&&today.getFullYear()===yr;
+              return(
+                <div key={i} style={{minHeight:80,background:isToday?"#0F1D35":C.card,borderRight:i%7<6?`1px solid ${C.border}`:"none",borderTop:`1px solid ${C.border}`,padding:"3px 4px"}}>
+                  <div onClick={()=>{setCurDate(new Date(yr,mo,d));setViewMode("day");}} style={{fontSize:12,fontWeight:isToday?700:400,display:"inline-flex",alignItems:"center",justifyContent:"center",width:22,height:22,borderRadius:"50%",background:isToday?C.accent:"transparent",color:isToday?"#fff":C.text3,marginBottom:2,cursor:"pointer"}}>{d}</div>
+                  {evs.slice(0,3).map((e,ei)=><EPill key={ei} ev={e} compact/>)}
+                  {evs.length>3&&<div style={{fontSize:9,color:C.text3,cursor:"pointer"}} onClick={()=>{setCurDate(new Date(yr,mo,d));setViewMode("day");}}>+{evs.length-3} more</div>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if(viewMode==="week"){
+    const ws=new Date(curDate);ws.setDate(ws.getDate()-ws.getDay());
+    const wds=Array.from({length:7},(_,i)=>{const d=new Date(ws);d.setDate(d.getDate()+i);return d;});
+    return(
+      <div>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+          <div style={{display:"flex",gap:6,alignItems:"center"}}>
+            <button onClick={()=>{const d=new Date(curDate);d.setDate(d.getDate()-7);setCurDate(d);}} style={{padding:"5px 11px",borderRadius:7,border:`1px solid ${C.border}`,background:C.card2,cursor:"pointer",fontSize:14,color:C.text}}>‹</button>
+            <span style={{fontWeight:600,fontSize:14,color:C.text}}>{wds[0].toLocaleDateString("en-US",{month:"short",day:"numeric"})} – {wds[6].toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</span>
+            <button onClick={()=>{const d=new Date(curDate);d.setDate(d.getDate()+7);setCurDate(d);}} style={{padding:"5px 11px",borderRadius:7,border:`1px solid ${C.border}`,background:C.card2,cursor:"pointer",fontSize:14,color:C.text}}>›</button>
+          </div>
+          <VToggle/>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",border:`1px solid ${C.border}`,borderRadius:10,overflow:"hidden"}}>
+          {wds.map((wd,i)=>{
+            const ds=wd.toISOString().slice(0,10),evs=evOn(ds),isToday=wd.toDateString()===today.toDateString();
+            return(
+              <div key={i} style={{minHeight:120,background:isToday?"#0F1D35":C.card,borderRight:i<6?`1px solid ${C.border}`:"none",padding:"6px 5px"}}>
+                <div onClick={()=>{setCurDate(wd);setViewMode("day");}} style={{fontSize:11,fontWeight:600,color:isToday?"#fff":C.text2,marginBottom:4,cursor:"pointer",display:"inline-flex",flexDirection:"column",alignItems:"center",background:isToday?C.accent:"transparent",borderRadius:6,padding:isToday?"2px 6px":"0"}}>
+                  <span style={{fontSize:10}}>{DAYS[i]}</span><span style={{fontSize:14}}>{wd.getDate()}</span>
+                </div>
+                {evs.map((e,ei)=><div key={ei} onClick={()=>onEventClick(e)} style={{background:e.bg,color:e.color,border:`1px solid ${e.border}`,borderRadius:4,padding:"3px 5px",fontSize:10,fontWeight:500,marginBottom:2,cursor:"pointer",lineHeight:1.3}}>{icon(e.type)} {e.label}{e.sub&&<div style={{fontSize:9,opacity:0.75}}>{e.sub}</div>}</div>)}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+  const ds=curDate.toISOString().slice(0,10),evs=evOn(ds),isToday=curDate.toDateString()===today.toDateString();
+  return(
+    <div>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+          <button onClick={()=>{const d=new Date(curDate);d.setDate(d.getDate()-1);setCurDate(d);}} style={{padding:"5px 11px",borderRadius:7,border:`1px solid ${C.border}`,background:C.card2,cursor:"pointer",fontSize:14,color:C.text}}>‹</button>
+          <span style={{fontWeight:600,fontSize:15,color:isToday?C.accent:C.text}}>{curDate.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"})}{isToday?" — Today":""}</span>
+          <button onClick={()=>{const d=new Date(curDate);d.setDate(d.getDate()+1);setCurDate(d);}} style={{padding:"5px 11px",borderRadius:7,border:`1px solid ${C.border}`,background:C.card2,cursor:"pointer",fontSize:14,color:C.text}}>›</button>
+        </div>
+        <VToggle/>
+      </div>
+      {evs.length===0&&<div style={{textAlign:"center",padding:"40px 20px",color:C.text3,fontSize:13}}>Nothing scheduled this day.</div>}
+      {evs.map((e,i)=>{
+        const kid=KIDS.find(k=>k.key===e.kidKey);
+        return(
+          <div key={i} onClick={()=>onEventClick(e)} style={{background:e.bg,border:`1px solid ${e.border}`,borderLeft:`4px solid ${e.color}`,borderRadius:10,padding:"14px 16px",marginBottom:10,cursor:"pointer"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+              <div><div style={{fontWeight:600,fontSize:14,color:e.color,marginBottom:3}}>{icon(e.type)} {e.label}</div>{e.sub&&<div style={{fontSize:12,color:C.text2}}>{e.sub}</div>}{e.notAttending&&<div style={{fontSize:12,color:C.warning,marginTop:3}}>Conflict — attending another event</div>}</div>
+              {kid&&<KidPill kidKey={e.kidKey}/>}
+            </div>
+            <div style={{fontSize:11,color:C.text3,marginTop:8}}>Tap to edit →</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Dashboard ──
+function Dashboard({sports,summerData,conflicts,onNavigate}){
+  const today=new Date();
+
+  // Upcoming meets within 60 days
+  const upcoming=[];
+  sports.forEach(sp=>{
+    sp.sessions.forEach(sess=>{
+      if(!sess.enrolled)return;
+      sess.meets.forEach(m=>{
+        const d=new Date((m.dateStart||m.date)+"T12:00:00");
+        const diff=Math.floor((d-today)/(1000*60*60*24));
+        if(diff>=0&&diff<=60){
+          const conf=conflicts.find(c=>c.kidKey===sp.kidKey&&c.date===(m.dateStart||m.date));
+          upcoming.push({...m,kidKey:sp.kidKey,sportName:sp.name,diff,hasConflict:!!conf&&conf.events?.length>1});
+        }
+      });
+    });
+  });
+  upcoming.sort((a,b)=>a.diff-b.diff);
+
+  // Finances
+  const allSess=sports.flatMap(sp=>sp.sessions.map(s=>({...s,kidKey:sp.kidKey,sportName:sp.name})));
+  const grandTotal=allSess.filter(s=>s.enrolled).reduce((sum,s)=>sum+Number(s.cost||0),0);
+  const byKid=KIDS.map(k=>({...k,total:allSess.filter(s=>s.kidKey===k.key&&s.enrolled).reduce((sum,s)=>sum+Number(s.cost||0),0)}));
+
+  // Mini calendar for current month
+  const yr=today.getFullYear(),mo=today.getMonth();
+  const first=new Date(yr,mo,1).getDay(),dim=new Date(yr,mo+1,0).getDate();
+  const calCells=[];for(let i=0;i<first;i++)calCells.push(null);for(let d=1;d<=dim;d++)calCells.push(d);
+  const meetDates=new Set(sports.flatMap(sp=>sp.sessions.flatMap(sess=>sess.meets.map(m=>Number((m.dateStart||m.date||"").split("-")[2])))));
+
+  const tileStyle={background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"18px 20px",cursor:"pointer",transition:"border-color 0.15s"};
+
+  return(
+    <div>
+      <div style={{marginBottom:22}}>
+        <div style={{fontSize:13,color:C.text2,marginBottom:4}}>{today.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"})}</div>
+        <div style={{fontSize:24,fontWeight:700,color:C.text}}>Good {today.getHours()<12?"morning":today.getHours()<17?"afternoon":"evening"} 👋</div>
+      </div>
+
+      {/* Top row — upcoming + conflict alert */}
+      <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"18px 20px",marginBottom:14,cursor:"pointer"}} onClick={()=>onNavigate("activities","calendar")}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+          <div style={{fontWeight:600,fontSize:15,color:C.text}}>📅 Upcoming meets</div>
+          <span style={{fontSize:12,color:C.accent}}>View calendar →</span>
+        </div>
+        {upcoming.length===0&&<div style={{fontSize:13,color:C.text3}}>No meets scheduled in the next 60 days.</div>}
+        <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+          {upcoming.slice(0,4).map((m,i)=>{
+            const sc=getSC(m.sportName);
+            const kid=KIDS.find(k=>k.key===m.kidKey);
+            const dLabel=m.diff===0?"Today":m.diff===1?"Tomorrow":`In ${m.diff} days`;
+            const isMulti=m.dateEnd&&m.dateEnd!==m.dateStart;
+            return(
+              <div key={i} style={{background:sc.bg,border:`1px solid ${m.hasConflict?"#F59E0B":sc.border}`,borderRadius:10,padding:"10px 14px",flex:"1 1 180px",minWidth:160}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
+                  <span style={{fontSize:10,fontWeight:600,color:sc.txt,background:"rgba(0,0,0,0.2)",padding:"1px 7px",borderRadius:4}}>{dLabel}</span>
+                  {m.hasConflict&&<span style={{fontSize:10,color:C.warning}}>⚠ Conflict</span>}
+                  {kid&&<KidPill kidKey={m.kidKey} small/>}
+                </div>
+                <div style={{fontWeight:600,fontSize:13,color:"#E2E8F0",marginBottom:2}}>{m.name}</div>
+                <div style={{fontSize:11,color:"#64748B"}}>{isMulti?`${fmtDate(m.dateStart)} – ${fmtDate(m.dateEnd)}`:fmtDate(m.dateStart)}{m.time?` · ${m.time}`:""}</div>
+                {m.location&&<div style={{fontSize:11,color:"#4A5568",marginTop:2}}>{m.location}</div>}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Middle row — kids + finances */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14}}>
+        {/* Kids tile */}
+        <div style={tileStyle} onClick={()=>onNavigate("activities","activities")} onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+            <div style={{fontWeight:600,fontSize:15,color:C.text}}>👨‍👩‍👧‍👦 Kids</div>
+            <span style={{fontSize:12,color:C.accent}}>View all →</span>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            {KIDS.filter(k=>k.key!=="sadie").map(k=>{
+              const kSports=sports.filter(s=>s.key===k.key||s.kidKey===k.key);
+              const sportNames=[...new Set(kSports.map(s=>s.name))];
+              return(
+                <div key={k.key} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",background:C.card2,borderRadius:8,border:`1px solid ${C.border}`}}>
+                  <KidAvatar kidKey={k.key} size={32}/>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:13,fontWeight:600,color:C.text}}>{k.name}</div>
+                    <div style={{fontSize:11,color:C.text3}}>{sportNames.length?sportNames.join(" · "):"No activities"}</div>
+                  </div>
+                  <div style={{fontSize:11,color:C.text3}}>Age {ageAsOf(k.dob,"2026-06-22")}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Finances tile */}
+        <div style={tileStyle} onClick={()=>onNavigate("activities","finances")} onMouseEnter={e=>e.currentTarget.style.borderColor=C.success} onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+            <div style={{fontWeight:600,fontSize:15,color:C.text}}>💰 Finances</div>
+            <span style={{fontSize:12,color:"#10B981"}}>View detail →</span>
+          </div>
+          <div style={{fontSize:28,fontWeight:700,color:C.text,marginBottom:14}}>{fmtMoney(grandTotal)}</div>
+          <div style={{display:"flex",flexDirection:"column",gap:6}}>
+            {byKid.filter(k=>k.total>0).map(k=>{
+              const pct=grandTotal?Math.round((k.total/grandTotal)*100):0;
+              return(
+                <div key={k.key}>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:3}}>
+                    <span style={{color:k.color,fontWeight:500}}>{k.name}</span>
+                    <span style={{color:C.text,fontWeight:500}}>{fmtMoney(k.total)}</span>
+                  </div>
+                  <div style={{background:C.card3,borderRadius:4,height:5,overflow:"hidden"}}>
+                    <div style={{background:k.color,height:"100%",width:`${pct}%`,borderRadius:4}}/>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom row — mini calendar + active sports */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+        {/* Mini calendar */}
+        <div style={tileStyle} onClick={()=>onNavigate("activities","calendar")} onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+            <div style={{fontWeight:600,fontSize:15,color:C.text}}>🗓 {MONTHS[mo]} {yr}</div>
+            <span style={{fontSize:12,color:C.accent}}>Open calendar →</span>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:3}}>
+            {DAYS.map(d=><div key={d} style={{textAlign:"center",fontSize:10,color:C.text3,fontWeight:500,padding:"2px 0"}}>{d[0]}</div>)}
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2}}>
+            {calCells.map((d,i)=>{
+              if(!d)return <div key={i}/>;
+              const isToday=d===today.getDate();
+              const hasMeet=meetDates.has(d);
+              return <div key={i} style={{aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,borderRadius:4,background:isToday?C.accent:hasMeet?"#0A1F35":"transparent",color:isToday?"#fff":hasMeet?"#38BDF8":C.text3,fontWeight:isToday?700:400,position:"relative"}}>{d}{hasMeet&&!isToday&&<div style={{position:"absolute",bottom:1,left:"50%",transform:"translateX(-50%)",width:3,height:3,borderRadius:"50%",background:"#38BDF8"}}/>}</div>;
+            })}
+          </div>
+        </div>
+
+        {/* Active sports */}
+        <div style={tileStyle} onClick={()=>onNavigate("activities","activities")} onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+            <div style={{fontWeight:600,fontSize:15,color:C.text}}>🏃 Active now</div>
+            <span style={{fontSize:12,color:C.accent}}>All activities →</span>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {sports.filter(sp=>sp.sessions.some(s=>s.enrolled)).slice(0,5).map(sp=>{
+              const sc=getSC(sp.name);
+              const sess=sp.sessions.find(s=>s.enrolled);
+              return(
+                <div key={sp.id} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 10px",background:sc.bg,border:`1px solid ${sc.border}`,borderRadius:8}}>
+                  <div style={{width:8,height:8,borderRadius:"50%",background:sc.txt,flexShrink:0}}/>
+                  <div style={{flex:1}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:12,fontWeight:600,color:sc.txt}}>{sp.name}</span><KidPill kidKey={sp.kidKey} small/></div>
+                    {sess&&<div style={{fontSize:10,color:"#64748B",marginTop:1}}>{sess.practiceDays.join(", ")} · {sess.practiceTime}</div>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Activities Detail Page ──
+function ActivitiesPage({sports,setSports,conflicts,setConflicts,summerData,settings,initialTab}){
+  const [sub,setSub]=useState(initialTab||"calendar");
+  const [showSummer,setShowSummer]=useState(true);
+  const [showEC,setShowEC]=useState(true);
+  const [filterKid,setFilterKid]=useState("all");
+  const [filterSport,setFilterSport]=useState("all");
+  const [expanded,setExpanded]=useState(null);
+  const [selectedSport,setSelectedSport]=useState(null);
+  const [addSport,setAddSport]=useState(false);
+  const [editSport,setEditSport]=useState(null);
+  const [addSession,setAddSession]=useState(null);
+  const [editSession,setEditSession]=useState(null);
+  const [addMeet,setAddMeet]=useState(null);
+  const [editMeet,setEditMeet]=useState(null);
+
+  const sportOptions=settings.sportOptions||DEFAULT_SPORT_OPTIONS;
+  const uniqueSports=[...new Set(sports.map(s=>s.name))].sort();
+
+  function persist(u){setSports(u);store.set(SK.activities,u);}  // async fire-and-forget
+  function saveSport(sp){const u=editSport?sports.map(s=>s.id===sp.id?sp:s):[...sports,sp];persist(u);setAddSport(false);setEditSport(null);}
+  function saveSession(sid,sess){const u=sports.map(s=>s.id===sid?{...s,sessions:editSession?s.sessions.map(x=>x.id===sess.id?sess:x):[...s.sessions,sess]}:s);persist(u);setAddSession(null);setEditSession(null);}
+  function saveMeet(sid,sessId,meet){const u=sports.map(s=>s.id===sid?{...s,sessions:s.sessions.map(sess=>sess.id===sessId?{...sess,meets:editMeet?sess.meets.map(m=>m.id===meet.id?meet:m):[...sess.meets,meet]}:sess)}:s);persist(u);setAddMeet(null);setEditMeet(null);}
+  function deleteSport(id){if(!window.confirm("Remove?"))return;persist(sports.filter(s=>s.id!==id));}
+  function deleteSession(sid,sessId){persist(sports.map(s=>s.id===sid?{...s,sessions:s.sessions.filter(x=>x.id!==sessId)}:s));}
+  function deleteMeet(sid,sessId,mid){persist(sports.map(s=>s.id===sid?{...s,sessions:s.sessions.map(sess=>sess.id===sessId?{...sess,meets:sess.meets.filter(m=>m.id!==mid)}:sess)}:s));}
+
+  useEffect(()=>{
+    const map={};
+    sports.forEach(sp=>sp.sessions.forEach(sess=>{if(!sess.enrolled)return;sess.meets.forEach(m=>{if(!m.attending)return;const d=m.dateStart||m.date||"";const k=`${sp.kidKey}__${d}`;if(!map[k])map[k]={kidKey:sp.kidKey,date:d,events:[]};map[k].events.push({name:m.name,meetId:m.id,sportId:sp.id,sessionId:sess.id});});}));
+    setConflicts(Object.values(map).filter(x=>x.events.length>1).map(c=>{const ex=conflicts.find(x=>x.kidKey===c.kidKey&&x.date===c.date);return{...c,chosen:ex?.chosen||null};}));
+  },[sports]);
+
+  function handleCalClick(ev){
+    if(ev.type==="summer")return;
+    if(ev.type==="meet"&&ev.meetId){const sp=sports.find(s=>s.id===ev.sportId);if(!sp)return;const sess=sp.sessions.find(s=>s.id===ev.sessionId);if(!sess)return;const meet=sess.meets.find(m=>m.id===ev.meetId);if(meet)setEditMeet({sportId:ev.sportId,sessionId:ev.sessionId,meet});}
+    else if(ev.type==="practice"&&ev.sportId){const sp=sports.find(s=>s.id===ev.sportId);if(sp)setEditSport(sp);}
+  }
+  function resolveConflict(c,meetId){setConflicts(conflicts.map(x=>x.kidKey===c.kidKey&&x.date===c.date?{...x,chosen:meetId}:x));}
+
+  const filtered=sports.filter(s=>(filterKid==="all"||s.kidKey===filterKid)&&(filterSport==="all"||s.name===filterSport));
+  const SUBTABS=[{k:"calendar",l:"📅 Calendar"},{k:"activities",l:"🎯 Activities"},{k:"results",l:"🏆 Results"},{k:"finances",l:"💰 Finances"}];
+
+  // ── Finances ──
+  function FinancesView(){
+    const [view,setView]=useState("child");
+    const allSessions=sports.flatMap(sp=>sp.sessions.map(sess=>({...sess,sportName:sp.name,kidKey:sp.kidKey,teamName:sp.teamName})));
+    const grandTotal=allSessions.filter(s=>s.enrolled).reduce((sum,s)=>sum+Number(s.cost||0),0);
+    const byChild=KIDS.map(k=>{const sessions=allSessions.filter(s=>s.kidKey===k.key&&s.enrolled);return{...k,sessions,total:sessions.reduce((sum,s)=>sum+Number(s.cost||0),0)};}).filter(k=>k.sessions.length>0);
+    const bySport=[...new Set(sports.map(s=>s.name))].map(sport=>{const ss=allSessions.filter(s=>s.sportName===sport&&s.enrolled);return{sport,total:ss.reduce((sum,s)=>sum+Number(s.cost||0),0),sessions:ss,kids:[...new Set(ss.map(s=>s.kidKey))]};}).filter(s=>s.sessions.length>0).sort((a,b)=>b.total-a.total);
+    const byMonth=()=>{const map={};allSessions.filter(s=>s.enrolled&&s.start).forEach(sess=>{const start=new Date(sess.start),end=new Date(sess.end||sess.start);const cost=Number(sess.cost||0);const months=Math.max(1,Math.round((end-start)/(1000*60*60*24*30)));const monthly=cost/months;let cur=new Date(start);while(cur<=end){const key=`${cur.getFullYear()}-${String(cur.getMonth()+1).padStart(2,"0")}`;if(!map[key])map[key]={label:`${MONTHS[cur.getMonth()].slice(0,3)} ${cur.getFullYear()}`,total:0};map[key].total+=monthly;cur.setMonth(cur.getMonth()+1);}});return Object.entries(map).sort((a,b)=>a[0].localeCompare(b[0])).map(([k,v])=>({key:k,...v}));};
+    const VIEWS=[{k:"child",l:"By Child"},{k:"sport",l:"By Sport"},{k:"month",l:"By Month"},{k:"session",l:"By Session"}];
+    return(
+      <div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:10,marginBottom:20}}>
+          <div style={{background:"#1E1B4B",borderRadius:12,padding:"16px 18px",border:"1px solid #4338CA"}}>
+            <div style={{fontSize:12,color:"#A5B4FC",marginBottom:4}}>Total spending</div>
+            <div style={{fontSize:24,fontWeight:700,color:"#fff"}}>{fmtMoney(grandTotal)}</div>
+          </div>
+          {KIDS.map(k=>{const t=allSessions.filter(s=>s.kidKey===k.key&&s.enrolled).reduce((sum,s)=>sum+Number(s.cost||0),0);if(!t)return null;return(<div key={k.key} style={{background:k.bg,borderRadius:12,padding:"16px 18px",border:`1px solid ${k.color}44`}}><div style={{fontSize:12,color:k.color,marginBottom:4}}>{k.name}</div><div style={{fontSize:20,fontWeight:700,color:C.text}}>{fmtMoney(t)}</div></div>);})}
+        </div>
+        <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
+          {VIEWS.map(v=><button key={v.k} onClick={()=>setView(v.k)} style={{padding:"6px 16px",borderRadius:8,border:`1px solid ${view===v.k?C.accent:C.border}`,background:view===v.k?C.accent:C.card2,color:view===v.k?"#fff":C.text2,cursor:"pointer",fontSize:13,fontWeight:view===v.k?500:400}}>{v.l}</button>)}
+        </div>
+        {view==="child"&&byChild.map(k=>(
+          <div key={k.key} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden",marginBottom:12}}>
+            <div style={{background:k.bg,padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div style={{display:"flex",alignItems:"center",gap:10}}><KidAvatar kidKey={k.key} size={32}/><span style={{fontWeight:600,fontSize:15,color:k.color}}>{k.name}</span></div>
+              <span style={{fontWeight:700,fontSize:18,color:"#E2E8F0"}}>{fmtMoney(k.total)}</span>
+            </div>
+            {k.sessions.map((s,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 16px",borderBottom:i<k.sessions.length-1?`1px solid ${C.border}`:"none"}}><div><div style={{fontSize:13,color:C.text,fontWeight:500}}>{s.sportName} — {s.name}</div><div style={{fontSize:11,color:C.text3}}>{s.teamName}</div></div><span style={{fontWeight:600,color:C.text,fontSize:13}}>{fmtMoney(s.cost)}</span></div>)}
+          </div>
+        ))}
+        {view==="sport"&&bySport.map((s,i)=>{const sc=getSC(s.sport);return(<div key={i} style={{background:C.card,border:`1px solid ${sc.border}`,borderLeft:`4px solid ${sc.txt}`,borderRadius:12,padding:"12px 16px",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}><SportPill name={s.sport}/>{s.kids.map(k=><KidPill key={k} kidKey={k} small/>)}</div><div style={{fontSize:12,color:C.text3}}>{s.sessions.length} session{s.sessions.length>1?"s":""}</div></div><span style={{fontWeight:700,fontSize:18,color:sc.txt}}>{fmtMoney(s.total)}</span></div>);})}
+        {view==="month"&&byMonth().map((m,i)=>{const pct=grandTotal?Math.round((m.total/grandTotal)*100):0;return(<div key={i} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"12px 16px",marginBottom:8}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}><span style={{fontWeight:500,fontSize:14,color:C.text}}>{m.label}</span><span style={{fontWeight:700,fontSize:15,color:C.accent}}>{fmtMoney(m.total)}</span></div><div style={{background:C.card2,borderRadius:4,height:6,overflow:"hidden"}}><div style={{background:C.accent,height:"100%",width:`${pct}%`,borderRadius:4}}/></div></div>);})}
+        {view==="session"&&(
+          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden"}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr auto",padding:"10px 16px",background:C.card3,borderBottom:`1px solid ${C.border}`}}>
+              {["Activity","Kid","Session","Cost"].map(h=><div key={h} style={{fontSize:11,fontWeight:600,color:C.text3,textTransform:"uppercase",letterSpacing:"0.05em"}}>{h}</div>)}
+            </div>
+            {allSessions.filter(s=>s.enrolled).sort((a,b)=>Number(b.cost||0)-Number(a.cost||0)).map((s,i)=>(
+              <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr auto",padding:"10px 16px",borderBottom:`1px solid ${C.border}`,background:i%2===0?C.card:C.card2}}>
+                <div><SportPill name={s.sportName}/></div>
+                <div style={{alignSelf:"center"}}><KidPill kidKey={s.kidKey} small/></div>
+                <div style={{fontSize:12,color:C.text2,alignSelf:"center"}}>{s.name}</div>
+                <div style={{fontWeight:600,color:C.text,fontSize:13,alignSelf:"center"}}>{fmtMoney(s.cost)}</div>
+              </div>
+            ))}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr auto",padding:"12px 16px",background:C.card3,borderTop:`1px solid ${C.border}`}}>
+              <div style={{fontWeight:600,color:C.text,gridColumn:"1/4"}}>Total</div>
+              <div style={{fontWeight:700,color:C.accent,fontSize:15}}>{fmtMoney(grandTotal)}</div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return(
+    <div>
+      <div style={{display:"flex",gap:5,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
+        {SUBTABS.map(t=><button key={t.k} onClick={()=>setSub(t.k)} style={{padding:"7px 16px",borderRadius:8,border:`1px solid ${sub===t.k?C.accent:C.border}`,background:sub===t.k?C.accent:C.card2,color:sub===t.k?"#fff":C.text2,cursor:"pointer",fontSize:13,fontWeight:sub===t.k?500:400}}>{t.l}</button>)}
+        <div style={{flex:1}}/>
+        <Btn onClick={()=>setAddSport(true)} small>+ Add activity</Btn>
+      </div>
+
+      {conflicts.length>0&&(
+        <div style={{background:"#2D1A05",border:"1px solid #78350F",borderRadius:10,padding:"12px 14px",marginBottom:14}}>
+          <div style={{fontWeight:600,fontSize:13,color:C.warning,marginBottom:8}}>⚠ {conflicts.length} scheduling conflict{conflicts.length>1?"s":""}</div>
+          {conflicts.map((c,i)=>{const kid=KIDS.find(k=>k.key===c.kidKey);return(
+            <div key={i} style={{background:C.card2,borderRadius:8,padding:"9px 12px",marginBottom:6}}>
+              <div style={{fontWeight:500,marginBottom:5,color:C.text,fontSize:12}}>{kid?.name} — {c.date}: <span style={{color:C.warning}}>{c.events.map(e=>e.name).join(" vs ")}</span></div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {c.events.map((e,ei)=><button key={ei} onClick={()=>resolveConflict(c,e.meetId)} style={{padding:"3px 11px",borderRadius:6,border:`1px solid ${c.chosen===e.meetId?C.accent:C.border}`,background:c.chosen===e.meetId?C.accent:C.card,color:c.chosen===e.meetId?"#fff":C.text,cursor:"pointer",fontSize:12}}>{c.chosen===e.meetId?"✓ ":""}{e.name}</button>)}
+                <button onClick={()=>resolveConflict(c,null)} style={{padding:"3px 11px",borderRadius:6,border:`1px solid ${C.border}`,background:C.card2,color:C.text3,cursor:"pointer",fontSize:12}}>Clear</button>
+              </div>
+            </div>
+          );})}
+        </div>
+      )}
+
+      {sub==="calendar"&&(
+        <div>
+          <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
+            <span style={{fontSize:12,color:C.text2,fontWeight:500}}>Show:</span>
+            <button onClick={()=>setShowEC(!showEC)} style={{padding:"3px 12px",borderRadius:6,border:`1px solid ${showEC?C.accent:C.border}`,background:showEC?"#0C2340":C.card2,color:showEC?"#38BDF8":C.text3,cursor:"pointer",fontSize:12}}>Extracurriculars</button>
+            <button onClick={()=>setShowSummer(!showSummer)} style={{padding:"3px 12px",borderRadius:6,border:`1px solid ${showSummer?C.accent:C.border}`,background:showSummer?"#2D1A05":C.card2,color:showSummer?"#FCD34D":C.text3,cursor:"pointer",fontSize:12}}>Summer</button>
+            <span style={{fontSize:11,color:C.text3}}>Tap any event to edit</span>
+          </div>
+          <CalendarView sports={sports} summerData={summerData} showSummer={showSummer} showEC={showEC} conflicts={conflicts} onEventClick={handleCalClick}/>
+        </div>
+      )}
+
+      {sub==="activities"&&!selectedSport&&(
+        <div>
+          {/* Filters */}
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
+            <span style={{fontSize:12,color:C.text2,alignSelf:"center"}}>Kid:</span>
+            {[{key:"all",name:"All"},...KIDS].map(k=><button key={k.key} onClick={()=>setFilterKid(k.key)} style={{padding:"4px 12px",borderRadius:20,border:`1px solid ${filterKid===k.key?C.accent:C.border}`,background:filterKid===k.key?C.accent:C.card2,color:filterKid===k.key?"#fff":C.text2,fontSize:12,cursor:"pointer"}}>{k.name}</button>)}
+          </div>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:18}}>
+            <span style={{fontSize:12,color:C.text2,alignSelf:"center"}}>Sport:</span>
+            {["all",...uniqueSports].map(s=><button key={s} onClick={()=>setFilterSport(s)} style={{padding:"4px 12px",borderRadius:20,border:`1px solid ${filterSport===s?C.accent:C.border}`,background:filterSport===s?C.accent:C.card2,color:filterSport===s?"#fff":C.text2,fontSize:12,cursor:"pointer"}}>{s==="all"?"All sports":s}</button>)}
+          </div>
+          {/* Tile grid */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:12}}>
+            {filtered.map(sp=>{
+              const sc=getSC(sp.name);
+              const isActive=sp.sessions.some(s=>s.enrolled);
+              const kid=KIDS.find(k=>k.key===sp.kidKey)||KIDS[0];
+              const activeSess=sp.sessions.filter(s=>s.enrolled);
+              const pracDays=activeSess[0]?.practiceDays||[];
+              const totalMeets=sp.sessions.reduce((n,s)=>n+s.meets.length,0);
+              // Sport icon emoji map
+              const SPORT_ICON={"Track & Field":"🏃","Swimming":"🏊","Golf":"⛳","Gymnastics":"🤸","Pickleball":"🏓","Cooking":"👨‍🍳","Soccer":"⚽","Tennis":"🎾","Basketball":"🏀","Dance":"💃","Baseball":"⚾","Softball":"🥎","Volleyball":"🏐"};
+              const icon=SPORT_ICON[sp.name]||"🎯";
+              return(
+                <div key={sp.id} onClick={()=>setSelectedSport(sp.id)}
+                  style={{background:sc.bg,border:`1.5px solid ${sc.border}`,borderRadius:14,padding:"18px 16px",cursor:"pointer",transition:"transform 0.15s,border-color 0.15s",position:"relative",minHeight:160}}
+                  onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.borderColor=sc.txt;}}
+                  onMouseLeave={e=>{e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.borderColor=sc.border;}}>
+                  {/* Active badge */}
+                  {isActive&&<div style={{position:"absolute",top:12,right:12,fontSize:10,background:"#052E16",color:"#4ADE80",padding:"2px 8px",borderRadius:20,fontWeight:600}}>Active</div>}
+                  {/* Icon */}
+                  <div style={{fontSize:32,marginBottom:10}}>{icon}</div>
+                  {/* Sport name */}
+                  <div style={{fontSize:15,fontWeight:700,color:sc.txt,marginBottom:4}}>{sp.name}</div>
+                  {/* Team */}
+                  <div style={{fontSize:12,color:"#94A3B8",marginBottom:8}}>{sp.teamName||sp.location||"—"}</div>
+                  {/* Kid badge */}
+                  <div style={{marginBottom:8}}><KidPill kidKey={sp.kidKey} small/></div>
+                  {/* Meta row */}
+                  <div style={{display:"flex",gap:10,fontSize:11,color:"#64748B"}}>
+                    {pracDays.length>0&&<span>{pracDays.join(" · ")}</span>}
+                    {totalMeets>0&&<span>· {totalMeets} meet{totalMeets>1?"s":""}</span>}
+                  </div>
+                </div>
+              );
+            })}
+            {/* Add tile */}
+            <div onClick={()=>setAddSport(true)} style={{background:"transparent",border:`1.5px dashed ${C.border}`,borderRadius:14,padding:"18px 16px",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:160,gap:8}} onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
+              <div style={{fontSize:28,color:C.text3}}>＋</div>
+              <div style={{fontSize:13,color:C.text3}}>Add activity</div>
+            </div>
+          </div>
+          {filtered.length===0&&<div style={{textAlign:"center",padding:"40px 20px",color:C.text3,fontSize:13}}>No activities match this filter.</div>}
+        </div>
+      )}
+
+      {/* ── Sport detail page ── */}
+      {sub==="activities"&&selectedSport&&(()=>{
+        const sp=sports.find(s=>s.id===selectedSport);
+        if(!sp)return null;
+        const sc=getSC(sp.name);
+        const SPORT_ICON={"Track & Field":"🏃","Swimming":"🏊","Golf":"⛳","Gymnastics":"🤸","Pickleball":"🏓","Cooking":"👨‍🍳","Soccer":"⚽","Tennis":"🎾","Basketball":"🏀","Dance":"💃"};
+        const icon=SPORT_ICON[sp.name]||"🎯";
+        const today2=new Date();
+        return(
+          <div>
+            {/* Back + actions */}
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
+              <button onClick={()=>setSelectedSport(null)} style={{background:"none",border:"none",cursor:"pointer",color:C.accent,fontSize:13,display:"flex",alignItems:"center",gap:4,padding:0}}>‹ Back to activities</button>
+              <div style={{display:"flex",gap:8}}>
+                {sp.website&&<a href={sp.website} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:sc.txt,background:sc.bg,padding:"5px 12px",borderRadius:7,textDecoration:"none",border:`1px solid ${sc.border}`}}>Site ↗</a>}
+                <Btn onClick={()=>setEditSport(sp)} variant="secondary" small>Edit activity</Btn>
+                <Btn onClick={()=>setAddSession({sportId:sp.id})} small>+ Add session</Btn>
+              </div>
+            </div>
+            {/* Header card */}
+            <div style={{background:sc.bg,border:`1.5px solid ${sc.border}`,borderRadius:16,padding:"20px 22px",marginBottom:20,display:"flex",alignItems:"flex-start",gap:18}}>
+              <div style={{fontSize:48}}>{icon}</div>
+              <div style={{flex:1}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
+                  <div style={{fontSize:22,fontWeight:700,color:sc.txt}}>{sp.name}</div>
+                  <KidPill kidKey={sp.kidKey}/>
+                  {sp.sessions.some(s=>s.enrolled)&&<span style={{fontSize:11,background:"#052E16",color:"#4ADE80",padding:"2px 8px",borderRadius:20,fontWeight:600}}>Active</span>}
+                </div>
+                <div style={{fontSize:14,color:"#94A3B8",marginBottom:4}}>{sp.teamName}</div>
+                {sp.location&&<div style={{fontSize:13,color:"#64748B"}}>{sp.location}{sp.phone?` · ${sp.phone}`:""}</div>}
+                {sp.coach&&<div style={{fontSize:13,color:"#64748B",marginTop:2}}>Coach: {sp.coach}</div>}
+                {sp.notes&&<div style={{fontSize:12,color:"#4A5568",marginTop:6,fontStyle:"italic"}}>{sp.notes}</div>}
+              </div>
+            </div>
+            {/* Sessions as tiles */}
+            <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:12}}>Sessions</div>
+            {sp.sessions.length===0&&<div style={{textAlign:"center",padding:"30px",color:C.text3,fontSize:13,background:C.card,borderRadius:12,border:`1px solid ${C.border}`,marginBottom:16}}>No sessions yet — add one to start tracking practices and meets.</div>}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:12,marginBottom:24}}>
+              {sp.sessions.map(sess=>{
+                const endDate=sess.end?new Date(sess.end+"T12:00:00"):null;
+                const isPast=endDate&&endDate<today2;
+                const isActive=sess.enrolled&&!isPast;
+                const opacity=isPast?0.5:1;
+                return(
+                  <div key={sess.id} style={{background:isActive?sc.bg:C.card2,border:`1.5px solid ${isActive?sc.border:C.border}`,borderRadius:12,padding:"16px",opacity,position:"relative"}}>
+                    {/* Status badge */}
+                    <div style={{position:"absolute",top:12,right:12,fontSize:10,background:isActive?"#052E16":isPast?"#1F2937":"#2D2005",color:isActive?"#4ADE80":isPast?"#6B7280":"#FCD34D",padding:"2px 8px",borderRadius:20,fontWeight:600}}>
+                      {isActive?"Active":isPast?"Past":"Reference"}
+                    </div>
+                    <div style={{fontWeight:700,fontSize:14,color:isActive?sc.txt:C.text,marginBottom:6,paddingRight:60}}>{sess.name}</div>
+                    <div style={{fontSize:12,color:isActive?"#94A3B8":C.text3,marginBottom:4}}>{sess.start} → {sess.end}</div>
+                    {sess.practiceDays.length>0&&<div style={{fontSize:12,color:isActive?"#94A3B8":C.text3,marginBottom:2}}>{sess.practiceDays.join(", ")} at {sess.practiceTime}</div>}
+                    {sess.practiceLocation&&<div style={{fontSize:11,color:"#4A5568",marginBottom:4}}>{sess.practiceLocation}</div>}
+                    {sess.cost&&<div style={{fontSize:13,fontWeight:600,color:isActive?sc.txt:C.text2,marginBottom:8}}>{fmtMoney(sess.cost)}</div>}
+                    <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:sess.meets.length?10:0}}>
+                      <span style={{fontSize:11,color:isActive?sc.txt:C.text3}}>{sess.meets.length} meet{sess.meets.length!==1?"s":""}</span>
+                      <div style={{flex:1}}/>
+                      <Btn onClick={()=>setEditSession({sportId:sp.id,session:sess})} variant="secondary" small>Edit</Btn>
+                      <Btn onClick={()=>deleteSession(sp.id,sess.id)} variant="danger" small>✕</Btn>
+                    </div>
+                    {/* Meets inside session */}
+                    {sess.meets.map(m=>{
+                      const conf=conflicts.find(c=>c.kidKey===sp.kidKey&&c.date===(m.dateStart||m.date));
+                      const notAtt=conf&&conf.chosen&&conf.chosen!==m.id;
+                      const isMulti=m.dateEnd&&m.dateEnd!==m.dateStart;
+                      const mDate=m.dateStart||m.date;
+                      const mPast=mDate&&new Date(mDate+"T12:00:00")<today2;
+                      return(
+                        <div key={m.id} style={{background:mPast?C.card3:C.card,borderRadius:8,padding:"8px 10px",marginBottom:4,border:`1px solid ${mPast?C.border:sc.border}`,opacity:notAtt?0.5:mPast?0.65:1}}>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                            <div>
+                              <div style={{fontSize:12,fontWeight:600,color:mPast?C.text2:C.text}}>{notAtt?"✗":mPast?"✓":"★"} {m.name}{isMulti?" (multi-day)":""}</div>
+                              <div style={{fontSize:11,color:C.text3}}>{isMulti?`${fmtDate(m.dateStart)} – ${fmtDate(m.dateEnd)}`:fmtDate(mDate)}{m.time?` · ${m.time}`:""}</div>
+                              {m.location&&<div style={{fontSize:11,color:C.text3}}>{m.location}</div>}
+                              {notAtt&&<div style={{fontSize:11,color:C.warning}}>Conflict — attending another</div>}
+                              {m.results.length>0&&<div style={{marginTop:4,display:"flex",gap:4,flexWrap:"wrap"}}>{m.results.map((r,ri)=><span key={ri} style={{fontSize:10,background:"#0C2340",color:"#38BDF8",padding:"1px 6px",borderRadius:4}}>{r.event}: {r.time} · {r.place}</span>)}</div>}
+                            </div>
+                            <div style={{display:"flex",gap:4,flexShrink:0,marginLeft:6}}>
+                              <Btn onClick={()=>setEditMeet({sportId:sp.id,sessionId:sess.id,meet:m})} variant="secondary" small>Edit</Btn>
+                              <Btn onClick={()=>deleteMeet(sp.id,sess.id,m.id)} variant="danger" small>✕</Btn>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <button onClick={()=>setAddMeet({sportId:sp.id,sessionId:sess.id,kidKey:sp.kidKey})} style={{width:"100%",marginTop:6,padding:"5px",borderRadius:6,border:`1px dashed ${C.border}`,background:"transparent",cursor:"pointer",fontSize:11,color:C.text3}}>+ Add meet</button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
+      {sub==="results"&&(
+        <div>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
+            {[{key:"all",name:"All"},...KIDS].map(k=><button key={k.key} onClick={()=>setFilterKid(k.key)} style={{padding:"4px 12px",borderRadius:20,border:`1px solid ${filterKid===k.key?C.accent:C.border}`,background:filterKid===k.key?C.accent:C.card2,color:filterKid===k.key?"#fff":C.text2,fontSize:12,cursor:"pointer"}}>{k.name}</button>)}
+          </div>
+          {sports.filter(sp=>filterKid==="all"||sp.kidKey===filterKid).map(sp=>{
+            const allMeets=sp.sessions.flatMap(sess=>sess.meets.filter(m=>m.results.length>0).map(m=>({...m,sessName:sess.name})));
+            if(!allMeets.length)return null;
+            return(
+              <div key={sp.id} style={{marginBottom:18}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}><SportPill name={sp.name}/><KidPill kidKey={sp.kidKey}/><span style={{fontSize:13,color:C.text2}}>{sp.teamName}</span></div>
+                {allMeets.map(m=>{const isMulti=m.dateEnd&&m.dateEnd!==m.dateStart;return(
+                  <div key={m.id} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"12px 14px",marginBottom:8}}>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+                      <div><div style={{fontWeight:600,fontSize:13,color:C.text}}>★ {m.name}</div><div style={{fontSize:12,color:C.text2}}>{isMulti?`${fmtDate(m.dateStart)} – ${fmtDate(m.dateEnd)}`:(m.dateStart||m.date)} · {m.location}</div></div>
+                      <div style={{fontSize:11,color:C.text3}}>{m.sessName}</div>
+                    </div>
+                    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                      {m.results.map((r,ri)=><div key={ri} style={{background:"#0C2340",border:"1px solid #1E40AF",borderRadius:7,padding:"6px 12px",fontSize:12}}><div style={{fontWeight:600,color:"#38BDF8"}}>{r.event}</div><div style={{color:"#E2E8F0"}}>{r.time} · <b>{r.place}</b></div>{r.notes&&<div style={{fontSize:11,color:"#64748B"}}>{r.notes}</div>}</div>)}
+                    </div>
+                  </div>
+                );})}
+              </div>
+            );
+          })}
+          {!sports.some(sp=>(filterKid==="all"||sp.kidKey===filterKid)&&sp.sessions.some(s=>s.meets.some(m=>m.results.length>0)))&&<div style={{textAlign:"center",padding:"40px 20px",color:C.text3,fontSize:13}}>No results recorded yet.</div>}
+        </div>
+      )}
+
+      {sub==="finances"&&<FinancesView/>}
+
+      {(addSport||editSport)&&<SportModal sport={editSport} sportOptions={sportOptions} onSave={saveSport} onClose={()=>{setAddSport(false);setEditSport(null);}}/>}
+      {addSession&&<SessionModal onSave={sess=>saveSession(addSession.sportId,sess)} onClose={()=>setAddSession(null)}/>}
+      {editSession&&<SessionModal session={editSession.session} onSave={sess=>saveSession(editSession.sportId,sess)} onClose={()=>setEditSession(null)}/>}
+      {addMeet&&<MeetModal kidKey={addMeet.kidKey} onSave={meet=>saveMeet(addMeet.sportId,addMeet.sessionId,meet)} onClose={()=>setAddMeet(null)}/>}
+      {editMeet&&<MeetModal meet={editMeet.meet} kidKey={sports.find(s=>s.id===editMeet.sportId)?.kidKey} onSave={meet=>saveMeet(editMeet.sportId,editMeet.sessionId,meet)} onClose={()=>setEditMeet(null)}/>}
+    </div>
+  );
+}
+
+// ── Summer Section ──
+function SummerSection({yearData,years,activeYear,setActiveYear,onYearDataChange}){
+  const [tab,setTab]=useState("dashboard");
+  const [editing,setEditing]=useState(null);
+  const [showYearMenu,setShowYearMenu]=useState(false);
+  const [addingYear,setAddingYear]=useState(false);
+  const [expandedSess,setExpandedSess]=useState(null);
+  const [filterKid,setFilterKid]=useState("all");
+  const cur=yearData[activeYear]||{schedule:DEF_SCHED_2026,providers:DEF_PROVIDERS,weeks:DEF_WEEKS_2026,notes:""};
+  const {schedule,providers,weeks}=cur;
+  const isHist=activeYear<new Date().getFullYear();
+  function updateCur(patch){onYearDataChange(activeYear,{...cur,...patch});}
+  function saveEntry({a,note,cost}){updateCur({schedule:{...schedule,[editing.kidKey]:schedule[editing.kidKey].map((e,i)=>i===editing.weekIdx?{a,note,cost}:e)}});setEditing(null);}
+  const TABS=[{k:"dashboard",l:"Dashboard"},{k:"kids",l:"By Kid"},{k:"programs",l:"Programs"},{k:"costs",l:"Costs"}];
+  return(
+    <div>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14,flexWrap:"wrap",gap:8}}>
+        <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+          {TABS.map(t=><button key={t.k} onClick={()=>setTab(t.k)} style={{padding:"7px 16px",borderRadius:8,border:`1px solid ${tab===t.k?C.accent:C.border}`,background:tab===t.k?C.accent:C.card2,color:tab===t.k?"#fff":C.text2,cursor:"pointer",fontSize:13,fontWeight:tab===t.k?500:400}}>{t.l}</button>)}
+        </div>
+        <div style={{position:"relative"}}>
+          <button onClick={()=>setShowYearMenu(!showYearMenu)} style={{padding:"7px 16px",borderRadius:8,border:`1px solid ${C.border}`,background:C.card2,cursor:"pointer",fontSize:14,fontWeight:600,color:C.text}}>{activeYear} ▼</button>
+          {showYearMenu&&<div style={{position:"absolute",top:42,right:0,background:C.card,border:`1px solid ${C.border}`,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,0.5)",minWidth:160,zIndex:200,overflow:"hidden"}}>
+            {years.map(y=><div key={y} onClick={()=>{setActiveYear(y);setShowYearMenu(false);}} style={{padding:"10px 16px",cursor:"pointer",fontWeight:y===activeYear?600:400,fontSize:14,background:y===activeYear?"#1E1B4B":C.card,color:y===activeYear?C.accent:C.text,borderBottom:`1px solid ${C.border}`}}>{y}{y===activeYear?" ✓":""}</div>)}
+            <div onClick={()=>{setShowYearMenu(false);setAddingYear(true);}} style={{padding:"10px 16px",cursor:"pointer",fontSize:14,color:C.accent,fontWeight:500,background:C.card2}}>+ Add {Math.max(...years)+1}</div>
+          </div>}
+        </div>
+      </div>
+      {isHist&&<div style={{background:"#2D1A05",border:"1px solid #78350F",borderRadius:8,padding:"8px 14px",marginBottom:14,fontSize:12,color:C.warning}}>📚 Viewing {activeYear} — historical record (read-only)</div>}
+      {tab==="dashboard"&&(
+        <div>
+          <div style={{display:"grid",gridTemplateColumns:"100px repeat(4,1fr)",gap:4,marginBottom:4}}>
+            <div/>{KIDS.map(k=><div key={k.key} style={{textAlign:"center",padding:"6px 4px",background:k.bg,borderRadius:8,border:`1px solid ${k.color}33`}}><div style={{fontSize:12,fontWeight:600,color:k.color}}>{k.name}</div><div style={{fontSize:10,color:C.text3}}>Age {ageAsOf(k.dob,`${activeYear}-06-22`)}</div></div>)}
+          </div>
+          {weeks.map((wk,wi)=>(
+            <div key={wi} style={{display:"grid",gridTemplateColumns:"100px repeat(4,1fr)",gap:4,marginBottom:4}}>
+              <div style={{background:C.card3,borderRadius:8,padding:"6px 8px",border:`1px solid ${C.border}`}}><div style={{fontWeight:600,fontSize:11,color:C.text}}>{wk.label}</div><div style={{fontSize:10,color:C.text3}}>{wk.dates}</div></div>
+              {KIDS.map(k=>{const s=(schedule[k.key]&&schedule[k.key][wi])||{a:"Unscheduled",note:"",cost:""};const c=getTC(s.a);return(
+                <div key={k.key} onClick={()=>!isHist&&setEditing({kidKey:k.key,weekIdx:wi,kid:k})} style={{background:c.bg,border:`1px solid ${c.border}`,borderRadius:8,padding:"6px 8px",cursor:isHist?"default":"pointer",minHeight:46}} onMouseEnter={e=>{if(!isHist)e.currentTarget.style.opacity="0.75";}} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
+                  <div style={{fontWeight:600,fontSize:11,color:c.txt}}>{s.a}</div>
+                  {s.note&&<div style={{fontSize:10,color:c.txt,opacity:0.8,marginTop:1,lineHeight:1.3}}>{s.note}</div>}
+                  {s.cost&&<div style={{fontSize:10,fontWeight:500,color:c.txt,marginTop:2}}>{s.cost}</div>}
+                </div>
+              );})}
+            </div>
+          ))}
+          {!isHist&&<div style={{fontSize:11,color:C.text3,marginTop:6,textAlign:"center"}}>Tap any cell to edit</div>}
+        </div>
+      )}
+      {tab==="kids"&&(
+        <div>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>{[{key:"all",name:"All"},...KIDS].map(k=><button key={k.key} onClick={()=>setFilterKid(k.key)} style={{padding:"5px 14px",borderRadius:20,border:`1px solid ${filterKid===k.key?C.accent:C.border}`,background:filterKid===k.key?C.accent:C.card2,color:filterKid===k.key?"#fff":C.text2,fontSize:13,cursor:"pointer"}}>{k.name}</button>)}</div>
+          {KIDS.filter(k=>filterKid==="all"||k.key===filterKid).map(k=>(
+            <div key={k.key} style={{marginBottom:22}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}><KidAvatar kidKey={k.key}/><div><div style={{fontWeight:600,fontSize:15,color:C.text}}>{k.name}</div><div style={{fontSize:11,color:C.text2}}>Age {ageAsOf(k.dob,`${activeYear}-06-22`)} · summer {activeYear}</div></div></div>
+              <div style={{borderRadius:12,overflow:"hidden",border:`1px solid ${C.border}`}}>
+                {weeks.map((wk,wi)=>{const s=(schedule[k.key]&&schedule[k.key][wi])||{a:"Unscheduled",note:"",cost:""};const c=getTC(s.a);return(
+                  <div key={wi} onClick={()=>!isHist&&setEditing({kidKey:k.key,weekIdx:wi,kid:k})} style={{display:"grid",gridTemplateColumns:"90px 1fr 1fr auto",alignItems:"center",gap:10,padding:"9px 14px",background:wi%2===0?C.card:C.card2,borderBottom:wi<weeks.length-1?`1px solid ${C.border}`:"none",cursor:isHist?"default":"pointer"}}>
+                    <div><div style={{fontWeight:500,fontSize:12,color:C.text}}>{wk.label}</div><div style={{fontSize:10,color:C.text3}}>{wk.dates}</div></div>
+                    <span style={{background:c.bg,color:c.txt,border:`1px solid ${c.border}`,borderRadius:5,padding:"2px 8px",fontSize:11,fontWeight:500}}>{s.a}</span>
+                    <div style={{fontSize:11,color:C.text2}}>{s.note||"—"}</div>
+                    <div style={{fontSize:12,fontWeight:600,color:"#4ADE80"}}>{s.cost}</div>
+                  </div>
+                );})}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {tab==="programs"&&(
+        <div>{providers.map(prov=>{const c=getTC(prov.name)||{bg:C.card2,txt:C.text2,border:C.border};return(
+          <div key={prov.id} style={{marginBottom:12,background:C.card,border:`1px solid ${c.border}`,borderLeft:`4px solid ${c.txt}`,borderRadius:12,overflow:"hidden"}}>
+            <div style={{padding:"12px 16px",background:c.bg}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:3}}><span style={{fontWeight:600,fontSize:14,color:c.txt}}>{prov.name}</span>{prov.url&&<a href={prov.url} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:c.txt,background:"rgba(0,0,0,0.3)",padding:"2px 8px",borderRadius:5,textDecoration:"none"}}>Site ↗</a>}</div>
+              <div style={{fontSize:12,color:"#94A3B8"}}>{prov.hours} · {prov.location}</div>
+              {prov.notes&&<div style={{fontSize:11,color:"#64748B",marginTop:2}}>{prov.notes}</div>}
+            </div>
+            {prov.sessions.map((sess,si)=>{const key=`${prov.id}-${si}`;const exp=expandedSess===key;const eligible=KIDS.filter(k=>{const age=ageAsOf(k.dob,`${activeYear}-06-22`);return age>=sess.ageMin&&age<=sess.ageMax;});return(
+              <div key={si} style={{borderTop:`1px solid ${C.border}`}}>
+                <div onClick={()=>setExpandedSess(exp?null:key)} style={{display:"grid",gridTemplateColumns:"1fr auto auto",alignItems:"center",gap:10,padding:"10px 16px",cursor:"pointer",background:exp?C.card2:C.card}}>
+                  <div><div style={{fontWeight:500,fontSize:13,color:C.text}}>{sess.name}</div><div style={{fontSize:11,color:C.text2}}>{sess.dates}</div></div>
+                  <span style={{fontSize:11,background:"#0A2010",color:"#4ADE80",padding:"2px 8px",borderRadius:5}}>Ages {sess.ageMin}–{sess.ageMax}</span>
+                  <div style={{textAlign:"right",fontSize:13,fontWeight:600,color:"#4ADE80"}}>{sess.cost?`$${sess.cost}`:"—"}<br/><span style={{fontSize:10,fontWeight:400,color:C.text3}}>{sess.costNote}</span></div>
+                </div>
+                {exp&&<div style={{padding:"0 16px 14px",background:C.card2,borderTop:`1px solid ${C.border}`}}>
+                  <p style={{fontSize:13,color:C.text2,lineHeight:1.6,marginBottom:10}}>{sess.description}</p>
+                  <div style={{display:"flex",gap:7,flexWrap:"wrap",alignItems:"center"}}><span style={{fontSize:12,color:C.text2,fontWeight:500}}>Eligible:</span>{eligible.length?eligible.map(k=><span key={k.key} style={{background:k.bg,color:k.color,borderRadius:5,padding:"2px 9px",fontSize:12,fontWeight:500}}>{k.name} (age {ageAsOf(k.dob,`${activeYear}-06-22`)})</span>):<span style={{fontSize:12,color:C.text3}}>None in age range</span>}</div>
+                  {prov.url&&<a href={prov.url} target="_blank" rel="noopener noreferrer" style={{display:"inline-block",marginTop:10,fontSize:12,color:C.accent,fontWeight:500}}>Register on {prov.name} →</a>}
+                </div>}
+              </div>
+            );})}
+          </div>
+        );})}
+        </div>
+      )}
+      {tab==="costs"&&activeYear===2026&&(
+        <div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:10,marginBottom:18}}>
+            {[{l:"Shay",k:"shay",t:5176.50},{l:"Christian",k:"christian",t:4528},{l:"Aurora",k:"aurora",t:4608}].map(item=>{const kid=KIDS.find(k=>k.key===item.k);return(<div key={item.l} style={{background:kid.bg,borderRadius:12,padding:"14px 16px",border:`1px solid ${kid.color}33`}}><div style={{fontSize:12,color:kid.color,marginBottom:4}}>{item.l}</div><div style={{fontSize:20,fontWeight:700,color:C.text}}>{fmtMoney(item.t)}</div></div>);})}
+            <div style={{background:"#1E1B4B",borderRadius:12,padding:"14px 16px",border:"1px solid #4338CA"}}><div style={{fontSize:12,color:"#A5B4FC",marginBottom:4}}>Total</div><div style={{fontSize:20,fontWeight:700,color:"#fff"}}>{fmtMoney(14312.50)}</div></div>
+          </div>
+        </div>
+      )}
+      {tab==="costs"&&activeYear!==2026&&<div style={{textAlign:"center",padding:"40px 20px",color:C.text3,fontSize:13}}>Add costs via the schedule for {activeYear}.</div>}
+      {editing&&<Modal title={`${editing.kid.name} — ${weeks[editing.weekIdx].label}`} onClose={()=>setEditing(null)}>{(()=>{const [a,setA]=useState(schedule[editing.kidKey][editing.weekIdx].a);const [note,setNote]=useState(schedule[editing.kidKey][editing.weekIdx].note);const [cost,setCost]=useState(schedule[editing.kidKey][editing.weekIdx].cost);const names=["JCC","Unscheduled",...providers.filter(p=>p.name!=="JCC").map(p=>p.name)];return(<><F label="Activity"><Sel value={a} onChange={setA} options={names}/></F><F label="Notes"><Inp value={note} onChange={setNote}/></F><F label="Cost"><Inp value={cost} onChange={setCost} placeholder="$650"/></F><div style={{display:"flex",gap:10,marginTop:10}}><Btn onClick={()=>setEditing(null)} variant="secondary">Cancel</Btn><Btn onClick={()=>saveEntry({a,note,cost})}>Save</Btn></div></>);})()}</Modal>}
+      {addingYear&&<Modal title="Add new summer year" onClose={()=>setAddingYear(false)}>{(()=>{const [y,setY]=useState(Math.max(...years)+1);const [nw,setNw]=useState(8);return(<><F label="Year"><Inp type="number" value={y} onChange={v=>setY(Number(v))}/></F><F label="Weeks"><Inp type="number" value={nw} onChange={v=>setNw(Number(v))}/></F><div style={{display:"flex",gap:10,marginTop:10}}><Btn onClick={()=>setAddingYear(false)} variant="secondary">Cancel</Btn><Btn onClick={()=>{const wks=Array.from({length:nw},(_,i)=>({n:i+1,label:`Week ${i+1}`,dates:`Week ${i+1}`}));const sched={};KIDS.forEach(k=>{sched[k.key]=Array(nw).fill(null).map(()=>({a:"Unscheduled",note:"",cost:""}));});onYearDataChange(y,{schedule:sched,providers:JSON.parse(JSON.stringify(DEF_PROVIDERS)),weeks:wks,notes:""});setAddingYear(false);}}>Create {y}</Btn></div></>);})()}</Modal>}
+    </div>
+  );
+}
+
+// ── Settings Modal ──
+function SettingsModal({settings,onSave,allData,onClose}){
+  const [s,setS]=useState({...settings});
+  const [sec,setSec]=useState("dropdowns");
+  const newRef=useRef("");
+  function addOpt(){const v=newRef.current.trim();if(v&&!s.sportOptions.includes(v))setS({...s,sportOptions:[...s.sportOptions,v]});document.getElementById("new-opt").value="";newRef.current="";}
+  function removeOpt(v){setS({...s,sportOptions:s.sportOptions.filter(x=>x!==v)});}
+  function download(){const blob=new Blob([JSON.stringify(allData,null,2)],{type:"application/json"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=`zaphire-backup-${new Date().toISOString().slice(0,10)}.json`;a.click();URL.revokeObjectURL(url);}
+  async function handleRestore(newS, d){setSettings(newS);await store.set(SK.settings,newS);if(d){if(d.sports){setSports(d.sports);await store.set(SK.activities,d.sports);}if(d.yearData)for(const [y,dat] of Object.entries(d.yearData)){const nd={...yearData,[Number(y)]:dat};setYearData(nd);await store.set(SK.year(Number(y)),dat);}}setShowSettings(false);}
+  return(
+    <Modal title="⚙ Settings" onClose={onClose} wide>
+      <div style={{display:"flex",gap:6,marginBottom:18,flexWrap:"wrap"}}>
+        {[{k:"dropdowns",l:"Dropdowns"},{k:"backup",l:"Backup & Restore"},{k:"info",l:"Data Info"}].map(x=><button key={x.k} onClick={()=>setSec(x.k)} style={{padding:"6px 16px",borderRadius:8,border:`1px solid ${sec===x.k?C.accent:C.border}`,background:sec===x.k?C.accent:C.card2,color:sec===x.k?"#fff":C.text2,cursor:"pointer",fontSize:13}}>{x.l}</button>)}
+      </div>
+      {sec==="dropdowns"&&<div><p style={{fontSize:13,color:C.text2,marginBottom:14}}>Add or remove options from the Sports dropdown.</p><div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:12}}>{s.sportOptions.map(opt=><span key={opt} style={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:6,padding:"3px 10px",fontSize:12,display:"flex",alignItems:"center",gap:5,color:C.text}}>{opt}<button onClick={()=>removeOpt(opt)} style={{background:"none",border:"none",cursor:"pointer",color:C.danger,fontSize:13,lineHeight:1,padding:0}}>×</button></span>)}</div><div style={{display:"flex",gap:8}}><input id="new-opt" placeholder="Add new sport…" onChange={e=>newRef.current=e.target.value} style={{flex:1,padding:"8px 12px",borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,background:C.card2,color:C.text}}/><Btn onClick={addOpt} small>Add</Btn></div><div style={{display:"flex",gap:10,marginTop:18}}><Btn onClick={onClose} variant="secondary">Cancel</Btn><Btn onClick={()=>onSave(s)}>Save</Btn></div></div>}
+      {sec==="backup"&&<div><div style={{fontWeight:600,fontSize:14,color:C.text,marginBottom:6}}>Download backup</div><p style={{fontSize:13,color:C.text2,marginBottom:14}}>Save all your data as a .json file.</p><Btn onClick={download}>⬇ Download backup (.json)</Btn><div style={{marginTop:22,fontWeight:600,fontSize:14,color:C.text,marginBottom:6}}>Restore from backup</div><p style={{fontSize:13,color:C.text2,marginBottom:10}}>Load a previously saved backup.</p>          <input type="file" accept=".json" onChange={async e=>{const file=e.target.files[0];if(!file)return;const text=await file.text();try{const d=JSON.parse(text);if(window.confirm("Replace all data with backup?"))await handleRestore(s,d);}catch{alert("Invalid file.");}}} style={{fontSize:13,color:C.text2}}/></div>}
+      {sec==="info"&&<div><div style={{fontWeight:600,fontSize:14,color:C.text,marginBottom:8}}>How your data is saved</div><p style={{fontSize:13,color:C.text2,lineHeight:1.7,marginBottom:14}}>Saved automatically in this browser's localStorage. To use on another computer: download a backup, copy both the .json and this .html file, open the .html, then restore from backup.</p><div style={{background:C.card2,borderRadius:8,padding:"10px 14px",fontSize:12,fontFamily:"monospace",lineHeight:1.9,color:C.text2}}><div>sap-years, sap-summer-[year]</div><div>sap-activities, sap-settings</div></div></div>}
+    </Modal>
+  );
+}
+
+// ── Root App ──
+function App(){
+  const [loading,setLoading]=useState(true);
+  const [page,setPage]=useState("home"); // home | activities | summer
+  const [activitiesTab,setActivitiesTab]=useState("calendar");
+  const [years,setYears]=useState([2026]);
+  const [activeYear,setActiveYear]=useState(2026);
+  const [yearData,setYearData]=useState({2026:{schedule:DEF_SCHED_2026,providers:DEF_PROVIDERS,weeks:DEF_WEEKS_2026,notes:""}});
+  const [sports,setSports]=useState(DEF_SPORTS);
+  const [conflicts,setConflicts]=useState([]);
+  const [showSettings,setShowSettings]=useState(false);
+  const [settings,setSettings]=useState({sportOptions:DEFAULT_SPORT_OPTIONS});
+
+  useEffect(()=>{
+    async function load(){
+      try{
+        const yl = await store.get(SK.years);
+        if(yl){
+          setYears(yl);
+          const data={};
+          for(const y of yl){
+            const r = await store.get(SK.year(y));
+            data[y]=r||{schedule:DEF_SCHED_2026,providers:DEF_PROVIDERS,weeks:DEF_WEEKS_2026,notes:""};
+          }
+          setYearData(data);
+        }
+        const acts = await store.get(SK.activities);
+        if(acts) setSports(acts);
+        const sett = await store.get(SK.settings);
+        if(sett) setSettings(sett);
+      }catch(e){ console.error("Load error:", e); }
+      setLoading(false);
+    }
+    load();
+  },[]);
+
+  async function persistYear(y,data){
+    const nd={...yearData,[y]:data};setYearData(nd);
+    await store.set(SK.year(y),data);
+    if(!years.includes(y)){const ny=[...years,y].sort((a,b)=>a-b);setYears(ny);await store.set(SK.years,ny);}
+  }
+  async function handleSettingsSave(newS,restoreData){
+    setSettings(newS);await store.set(SK.settings,newS);
+    if(restoreData){
+      if(restoreData.sports){setSports(restoreData.sports);await store.set(SK.activities,restoreData.sports);}
+      if(restoreData.yearData) for(const [y,d] of Object.entries(restoreData.yearData)) await persistYear(Number(y),d);
+    }
+    setShowSettings(false);
+  }
+  function navigate(pg,tab){setPage(pg);if(tab)setActivitiesTab(tab);}
+
+  const NAV=[
+    {k:"home",    icon:"⊞", label:"Home"},
+    {k:"activities",icon:"🎯",label:"Activities"},
+    {k:"summer",  icon:"☀️", label:"Summer"},
+  ];
+
+  if(loading)return <div style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh",flexDirection:"column",gap:12,background:C.bg}}><div style={{width:32,height:32,border:`3px solid ${C.border}`,borderTop:`3px solid ${C.accent}`,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/><div style={{color:C.text2,fontSize:14}}>Loading…</div><style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style></div>;
+
+  return(
+    <div style={{display:"flex",minHeight:"100vh",background:C.bg}}>
+      {/* Sidebar */}
+      <div style={{width:210,background:C.card,borderRight:`1px solid ${C.border}`,display:"flex",flexDirection:"column",flexShrink:0,position:"sticky",top:0,height:"100vh",overflowY:"auto"}}>
+        <div style={{padding:"20px 16px 16px",borderBottom:`1px solid ${C.border}`}}>
+          <div style={{fontSize:17,fontWeight:700,color:C.text}}>Zaphire</div>
+          <div style={{fontSize:11,color:C.text3,marginTop:1}}>Family Planner</div>
+        </div>
+        <div style={{padding:"10px 8px",flex:1}}>
+          {NAV.map(n=>(
+            <button key={n.k} onClick={()=>navigate(n.k)} style={{width:"100%",textAlign:"left",padding:"10px 12px",borderRadius:8,border:"none",background:page===n.k?"#1E1B4B":"transparent",color:page===n.k?C.accent:C.text2,cursor:"pointer",fontSize:14,fontWeight:page===n.k?600:400,display:"flex",alignItems:"center",gap:10,marginBottom:3}}>
+              <span style={{fontSize:16}}>{n.icon}</span>{n.label}
+            </button>
+          ))}
+        </div>
+        <div style={{padding:"12px 8px 20px",borderTop:`1px solid ${C.border}`}}>
+          <div style={{padding:"12px",background:C.card2,borderRadius:10,border:`1px solid ${C.border}`,marginBottom:10}}>
+            <div style={{fontSize:11,color:C.text3,marginBottom:8,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.05em"}}>Family</div>
+            {KIDS.map(k=>(
+              <div key={k.key} style={{display:"flex",alignItems:"center",gap:8,marginBottom:7}}>
+                <KidAvatar kidKey={k.key} size={26}/>
+                <div><div style={{fontSize:12,fontWeight:600,color:C.text,lineHeight:1.2}}>{k.name}</div><div style={{fontSize:10,color:C.text3}}>Age {ageAsOf(k.dob,"2026-06-22")}</div></div>
+              </div>
+            ))}
+          </div>
+          <button onClick={()=>setShowSettings(true)} style={{width:"100%",padding:"9px 12px",borderRadius:8,border:`1px solid ${C.border}`,background:C.card2,color:C.text2,cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",gap:8}}>
+            ⚙ Settings
+          </button>
+        </div>
+      </div>
+
+      {/* Main */}
+      <div style={{flex:1,overflowY:"auto",maxHeight:"100vh"}}>
+        <div style={{maxWidth:860,margin:"0 auto",padding:"22px 20px 40px"}}>
+          {/* Breadcrumb */}
+          {page!=="home"&&(
+            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:16,fontSize:13,color:C.text3}}>
+              <button onClick={()=>setPage("home")} style={{background:"none",border:"none",cursor:"pointer",color:C.accent,fontSize:13,padding:0}}>Home</button>
+              <span>›</span>
+              <span style={{color:C.text2}}>{page==="activities"?"Activities":"Summer Schedule"}</span>
+            </div>
+          )}
+          <div style={{marginBottom:20}}>
+            <h1 style={{fontSize:22,fontWeight:700,color:C.text,marginBottom:2}}>
+              {page==="home"&&"Home"}
+              {page==="activities"&&"🎯 Activities"}
+              {page==="summer"&&"☀️ Summer Schedule"}
+            </h1>
+            <div style={{fontSize:13,color:C.text2}}>
+              {page==="home"&&"Your family at a glance"}
+              {page==="activities"&&"Extracurriculars, meets, and results"}
+              {page==="summer"&&"Camp and program schedule by year"}
+            </div>
+          </div>
+          {page==="home"&&<Dashboard sports={sports} summerData={yearData[activeYear]} conflicts={conflicts} onNavigate={navigate}/>}
+          {page==="activities"&&<ActivitiesPage sports={sports} setSports={setSports} conflicts={conflicts} setConflicts={setConflicts} summerData={yearData[activeYear]} settings={settings} initialTab={activitiesTab}/>}
+          {page==="summer"&&<SummerSection yearData={yearData} years={years} activeYear={activeYear} setActiveYear={setActiveYear} onYearDataChange={persistYear}/>}
+        </div>
+      </div>
+
+      {showSettings&&<SettingsModal settings={settings} onSave={handleSettingsSave} allData={{sports,yearData,settings,years}} onClose={()=>setShowSettings(false)}/>}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
