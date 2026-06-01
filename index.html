@@ -8,12 +8,21 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.development.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet"/>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:system-ui,-apple-system,sans-serif;background:#0F1117;color:#E2E8F0;min-height:100vh}
 ::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:#1A1D27}::-webkit-scrollbar-thumb{background:#374151;border-radius:4px}
 input,select,textarea{font-family:inherit}
 input::placeholder,textarea::placeholder{color:#4A5568}
+.ac-wrap{position:relative;width:100%}
+.ac-dropdown{position:absolute;top:100%;left:0;right:0;background:#1A1D27;border:1px solid #6366F1;border-top:none;border-radius:0 0 8px 8px;z-index:9999;max-height:200px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,0.4)}
+.ac-item{padding:9px 12px;cursor:pointer;font-size:13px;color:#E2E8F0;border-bottom:1px solid #2D3748;line-height:1.4}
+.ac-item:last-child{border-bottom:none}
+.ac-item:hover{background:#222536}
+.ac-item-main{font-weight:500}
+.ac-item-sub{font-size:11px;color:#64748B;margin-top:1px}
 </style>
 </head>
 <body>
@@ -31,7 +40,77 @@ const store={
   set:async(k,v)=>{try{await sb.from("app_data").upsert({key:k,value:v,updated_at:new Date().toISOString()});}catch(e){console.error(e);}},
 };
 
-// ── Design tokens ──
+const MAPBOX_TOKEN="pk.eyJ1IjoiZHphcGhpcmUiLCJhIjoiY21wdWw5YmY0MXZnNDJwb3NnbTBodjRuaCJ9.MvimgVuQoK1SNZzRHztfMQ";
+
+// ── Address autocomplete component ──
+function AddrInp({value,onChange,placeholder}){
+  const [query,setQuery]=useState(value||"");
+  const [suggestions,setSuggestions]=useState([]);
+  const [open,setOpen]=useState(false);
+  const debounceRef=useRef(null);
+  const wrapRef=useRef(null);
+
+  useEffect(()=>{setQuery(value||"");},[value]);
+
+  useEffect(()=>{
+    function handleClick(e){if(wrapRef.current&&!wrapRef.current.contains(e.target)){setOpen(false);setSuggestions([]);}}
+    document.addEventListener("mousedown",handleClick);
+    return()=>document.removeEventListener("mousedown",handleClick);
+  },[]);
+
+  function handleChange(e){
+    const v=e.target.value;
+    setQuery(v);
+    onChange(v);
+    clearTimeout(debounceRef.current);
+    if(v.length<3){setSuggestions([]);setOpen(false);return;}
+    debounceRef.current=setTimeout(async()=>{
+      try{
+        const url=`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(v)}.json?access_token=${MAPBOX_TOKEN}&autocomplete=true&country=US&types=address,poi,place&limit=5`;
+        const res=await fetch(url);
+        const data=await res.json();
+        setSuggestions(data.features||[]);
+        setOpen(true);
+      }catch{setSuggestions([]);setOpen(false);}
+    },300);
+  }
+
+  function handleSelect(feat){
+    const full=feat.place_name||feat.text||"";
+    setQuery(full);
+    onChange(full);
+    setSuggestions([]);
+    setOpen(false);
+  }
+
+  function getSubtitle(feat){
+    const parts=feat.place_name?.split(", ")||[];
+    return parts.slice(1).join(", ");
+  }
+
+  return(
+    <div className="ac-wrap" ref={wrapRef}>
+      <input
+        type="text"
+        value={query}
+        onChange={handleChange}
+        onFocus={()=>{if(suggestions.length>0)setOpen(true);}}
+        placeholder={placeholder||"Start typing an address…"}
+        style={{width:"100%",padding:"8px 12px",borderRadius:open&&suggestions.length?`8px 8px 0 0`:"8px",border:`1px solid ${open&&suggestions.length?"#6366F1":"#2D3748"}`,fontSize:13,background:"#222536",color:"#E2E8F0"}}
+      />
+      {open&&suggestions.length>0&&(
+        <div className="ac-dropdown">
+          {suggestions.map((feat,i)=>(
+            <div key={i} className="ac-item" onMouseDown={()=>handleSelect(feat)}>
+              <div className="ac-item-main">{feat.text||feat.place_name?.split(",")[0]}</div>
+              <div className="ac-item-sub">{getSubtitle(feat)}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 const C={bg:"#0F1117",card:"#1A1D27",card2:"#222536",card3:"#161926",border:"#2D3748",text:"#E2E8F0",text2:"#94A3B8",text3:"#4A5568",accent:"#6366F1",success:"#10B981",warning:"#F59E0B",danger:"#EF4444"};
 
 // ── Kids default ──
@@ -123,7 +202,7 @@ function SportModal({sport,sportOptions,onSave,onClose}){
         <F label="Coach"><Inp value={s.coach} onChange={v=>setS({...s,coach:v})}/></F>
         <F label="Phone"><Inp value={s.phone} onChange={v=>setS({...s,phone:v})}/></F>
       </div>
-      <F label="Location"><Inp value={s.location} onChange={v=>setS({...s,location:v})}/></F>
+      <F label="Location"><AddrInp value={s.location} onChange={v=>setS({...s,location:v})} placeholder="Team / practice location"/></F>
       <F label="Website"><Inp value={s.website} onChange={v=>setS({...s,website:v})} placeholder="https://…"/></F>
       <F label="Notes"><textarea value={s.notes||""} onChange={e=>setS({...s,notes:e.target.value})} rows={2} style={{width:"100%",padding:"8px 12px",borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,background:C.card2,color:C.text,resize:"vertical"}}/></F>
       <div style={{display:"flex",gap:10,marginTop:10}}><Btn onClick={onClose} variant="secondary">Cancel</Btn><Btn onClick={()=>onSave({...s,name:isOther&&s.otherName?s.otherName:s.name})}>Save</Btn></div>
@@ -150,7 +229,7 @@ function SessionModal({session,onSave,onClose}){
       </F>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
         <F label="Practice time"><Inp value={s.practiceTime} onChange={v=>setS({...s,practiceTime:v})} placeholder="4:00 PM"/></F>
-        <F label="Practice location"><Inp value={s.practiceLocation} onChange={v=>setS({...s,practiceLocation:v})}/></F>
+        <F label="Practice location"><AddrInp value={s.practiceLocation} onChange={v=>setS({...s,practiceLocation:v})} placeholder="Where practices are held"/></F>
       </div>
       <F label="Enrollment">
         <div style={{display:"flex",gap:8}}>
@@ -177,7 +256,7 @@ function MeetModal({meet,kidKey,onSave,onClose,kids}){
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
         <F label="Time"><Inp value={m.time} onChange={v=>setM({...m,time:v})} placeholder="9:00 AM"/></F>
-        <F label="Location"><Inp value={m.location} onChange={v=>setM({...m,location:v})}/></F>
+        <F label="Location"><AddrInp value={m.location} onChange={v=>setM({...m,location:v})} placeholder="Venue / meet location"/></F>
       </div>
       <F label="Attending">
         <div style={{display:"flex",gap:8}}>
@@ -217,10 +296,10 @@ function MeetModal({meet,kidKey,onSave,onClose,kids}){
 function KidEditModal({kid,onSave,onClose}){
   const [k,setK]=useState({...kid});
   const sections=[
-    {title:"Basic info",fields:[["name","Name"],["dob","Date of birth","date"],["grade","Grade"],["school","School"]]},
+    {title:"Basic info",fields:[["name","Name"],["dob","Date of birth","date"],["grade","Grade"],["school","School","addr"]]},
     {title:"Medical",fields:[["allergies","Allergies"],["medical","Medical notes"]]},
     {title:"Emergency contact",fields:[["emergencyName","Contact name"],["emergencyPhone","Contact phone"],["emergencyRelation","Relationship"]]},
-    {title:"Doctor & Insurance",fields:[["doctor","Doctor name"],["doctorPhone","Doctor phone"],["insurance","Insurance provider"],["insuranceId","Insurance ID"]]},
+    {title:"Doctor & Insurance",fields:[["doctor","Doctor name"],["doctorPhone","Doctor phone"],["doctorAddress","Doctor address","addr"],["insurance","Insurance provider"],["insuranceId","Insurance ID"]]},
   ];
   return(
     <Modal title={`Edit — ${kid.name}`} onClose={onClose} wide>
@@ -229,7 +308,12 @@ function KidEditModal({kid,onSave,onClose}){
           <div style={{fontSize:11,fontWeight:600,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10}}>{sec.title}</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
             {sec.fields.map(([key,label,type])=>(
-              <F key={key} label={label}><Inp type={type||"text"} value={k[key]||""} onChange={v=>setK({...k,[key]:v})}/></F>
+              <F key={key} label={label}>
+                {type==="addr"
+                  ? <AddrInp value={k[key]||""} onChange={v=>setK({...k,[key]:v})} placeholder={`${label} address`}/>
+                  : <Inp type={type||"text"} value={k[key]||""} onChange={v=>setK({...k,[key]:v})}/>
+                }
+              </F>
             ))}
           </div>
         </div>
