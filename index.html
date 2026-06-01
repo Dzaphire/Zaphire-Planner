@@ -507,7 +507,6 @@ function KidProfilePage({kidKey,kids,sports,yearData,years,onBack}){
             const icon2=SPORT_ICON[sp.name]||"🎯";
             return(
               <div key={sp.id} style={{background:isActive?sc.bg:C.card2,border:`1.5px solid ${isActive?sc.border:C.border}`,borderRadius:12,padding:16,opacity:isActive?1:0.6}}>
-                <div style={{fontSize:28,marginBottom:8}}>{icon2}</div>
                 <div style={{fontWeight:700,fontSize:14,color:isActive?sc.txt:C.text2,marginBottom:3}}>{sp.name}</div>
                 <div style={{fontSize:12,color:"#64748B",marginBottom:8}}>{sp.teamName}</div>
                 {sp.sessions.map(sess=>{const isPast=sess.end&&new Date(sess.end+"T12:00:00")<today;return(<div key={sess.id} style={{background:"rgba(0,0,0,0.2)",borderRadius:6,padding:"5px 8px",marginBottom:4}}><div style={{fontSize:11,color:isPast?C.text3:sc.txt,fontWeight:500}}>{sess.name}</div><div style={{fontSize:10,color:"#4A5568"}}>{isPast?"Past":sess.enrolled?"Active":"Reference"} · {sess.practiceDays.join(", ")}</div></div>);})}
@@ -929,8 +928,7 @@ function ActivitiesPage({sports,setSports,conflicts,setConflicts,summerData,sett
         <div style={{background:C.card,border:`1.5px solid ${sc.border}`,borderRadius:16,marginBottom:16,overflow:"hidden"}}>
           {/* identity row */}
           <div style={{display:"flex",alignItems:"flex-start",gap:16,padding:"18px 20px",background:sc.bg}}>
-            <div style={{fontSize:44,lineHeight:1}}>{icon2}</div>
-            <div style={{flex:1}}>
+              <div style={{flex:1}}>
               <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:5,flexWrap:"wrap"}}>
                 <div style={{fontSize:22,fontWeight:700,color:sc.txt}}>{sp.name}</div>
                 {kid&&<KidPill kid={kid}/>}
@@ -1231,7 +1229,6 @@ function ActivitiesPage({sports,setSports,conflicts,setConflicts,summerData,sett
                   onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.borderColor=sc.txt;}}
                   onMouseLeave={e=>{e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.borderColor=sc.border;}}>
                   {isActive&&<div style={{position:"absolute",top:12,right:12,fontSize:10,background:"#052E16",color:"#4ADE80",padding:"2px 8px",borderRadius:20,fontWeight:600}}>Active</div>}
-                  <div style={{fontSize:32,marginBottom:10}}>{icon2}</div>
                   <div style={{fontSize:15,fontWeight:700,color:sc.txt,marginBottom:4}}>{sp.name}</div>
                   <div style={{fontSize:12,color:"#94A3B8",marginBottom:8}}>{sp.teamName||sp.location||"—"}</div>
                   {kid&&<div style={{marginBottom:8}}><KidPill kid={kid} small/></div>}
@@ -1422,8 +1419,59 @@ function SettingsModal({settings,onSave,allData,onClose,kids,onSaveKid}){
   );
 }
 
+// ── Login Screen ──
+const APP_ID="family";
+const APP_PW="schedule2026";
+function LoginScreen({onLogin}){
+  const [id,setId]=useState("");
+  const [pw,setPw]=useState("");
+  const [err,setErr]=useState("");
+  const [showPw,setShowPw]=useState(false);
+  function attempt(){
+    if(id.trim().toLowerCase()===APP_ID&&pw===APP_PW){onLogin();}
+    else{setErr("Incorrect ID or password. Please try again.");setPw("");}
+  }
+  function onKey(e){if(e.key==="Enter")attempt();}
+  return(
+    <div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
+      <div style={{width:"100%",maxWidth:360,background:C.card,border:`1px solid ${C.border}`,borderRadius:20,padding:"36px 32px",boxShadow:"0 8px 40px rgba(0,0,0,0.4)"}}>
+        <div style={{textAlign:"center",marginBottom:32}}>
+          <div style={{fontSize:36,marginBottom:12}}>🏠</div>
+          <div style={{fontSize:22,fontWeight:700,color:C.text,marginBottom:6}}>Family Scheduler</div>
+          <div style={{fontSize:13,color:C.text3}}>Sign in to continue</div>
+        </div>
+        <div style={{marginBottom:16}}>
+          <div style={{fontSize:12,color:C.text2,marginBottom:6,fontWeight:500}}>User ID</div>
+          <input
+            value={id} onChange={e=>{setId(e.target.value);setErr("");}} onKeyDown={onKey}
+            placeholder="Enter your ID"
+            style={{width:"100%",background:C.card2,border:`1px solid ${err?'#EF4444':C.border}`,borderRadius:10,padding:"10px 14px",fontSize:14,color:C.text,outline:"none",boxSizing:"border-box"}}
+            autoComplete="username"
+          />
+        </div>
+        <div style={{marginBottom:24}}>
+          <div style={{fontSize:12,color:C.text2,marginBottom:6,fontWeight:500}}>Password</div>
+          <div style={{position:"relative"}}>
+            <input
+              value={pw} onChange={e=>{setPw(e.target.value);setErr("");}} onKeyDown={onKey}
+              type={showPw?"text":"password"}
+              placeholder="Enter your password"
+              style={{width:"100%",background:C.card2,border:`1px solid ${err?'#EF4444':C.border}`,borderRadius:10,padding:"10px 40px 10px 14px",fontSize:14,color:C.text,outline:"none",boxSizing:"border-box"}}
+              autoComplete="current-password"
+            />
+            <button onClick={()=>setShowPw(v=>!v)} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:C.text3,fontSize:13,padding:0}}>{showPw?"Hide":"Show"}</button>
+          </div>
+        </div>
+        {err&&<div style={{background:"#2D0A0A",border:"1px solid #7F1D1D",borderRadius:8,padding:"9px 13px",fontSize:12,color:"#FCA5A5",marginBottom:16}}>{err}</div>}
+        <button onClick={attempt} style={{width:"100%",padding:"12px",background:C.accent,border:"none",borderRadius:10,color:"#fff",fontSize:15,fontWeight:600,cursor:"pointer"}}>Sign in</button>
+      </div>
+    </div>
+  );
+}
+
 // ── Root App ──
 function App(){
+  const [authed,setAuthed]=useState(()=>sessionStorage.getItem("fs_auth")==="1");
   const [loading,setLoading]=useState(true);
   const [page,setPage]=useState("home");
   const [subPage,setSubPage]=useState(null);
@@ -1472,6 +1520,8 @@ function App(){
 
   const NAV=[{k:"home",icon:"⊞",label:"Home"},{k:"activities",icon:"🎯",label:"Activities"},{k:"summer",icon:"☀️",label:"Summer"}];
 
+  if(!authed)return <LoginScreen onLogin={()=>{sessionStorage.setItem("fs_auth","1");setAuthed(true);}}/>;
+
   if(loading)return(
     <div style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh",flexDirection:"column",gap:12,background:C.bg}}>
       <div style={{width:32,height:32,border:`3px solid ${C.border}`,borderTop:`3px solid ${C.accent}`,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
@@ -1514,7 +1564,8 @@ function App(){
               </div>
             ))}
           </div>
-          <button onClick={()=>setShowSettings(true)} style={{width:"100%",padding:"9px 12px",borderRadius:8,border:`1px solid ${C.border}`,background:C.card2,color:C.text2,cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",gap:8}}>⚙ Settings</button>
+          <button onClick={()=>setShowSettings(true)} style={{width:"100%",padding:"9px 12px",borderRadius:8,border:`1px solid ${C.border}`,background:C.card2,color:C.text2,cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",gap:8,marginBottom:6}}>⚙ Settings</button>
+          <button onClick={()=>{sessionStorage.removeItem("fs_auth");setAuthed(false);}} style={{width:"100%",padding:"9px 12px",borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",color:C.text3,cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",gap:8}}>← Sign out</button>
         </div>
       </div>
 
