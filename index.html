@@ -211,9 +211,31 @@ function SportModal({sport,sportOptions,onSave,onClose}){
 }
 
 function SessionModal({session,onSave,onClose}){
-  const blank={id:Date.now()+"",name:"",start:"",end:"",cost:"",practiceDays:[],practiceTime:"",practiceLocation:"",enrolled:true,meets:[]};
-  const [s,setS]=useState(session||blank);
-  const tog=d=>setS({...s,practiceDays:s.practiceDays.includes(d)?s.practiceDays.filter(x=>x!==d):[...s.practiceDays,d]});
+  const blank={id:Date.now()+"",name:"",start:"",end:"",cost:"",practiceDays:[],practiceTime:"",practiceLocation:"",practiceDayDetails:[],practiceNotes:"",enrolled:true,meets:[]};
+  // migrate old sessions that only have practiceTime/practiceLocation
+  function migrate(s){
+    if(!s)return blank;
+    if(!s.practiceDayDetails)s={...s,practiceDayDetails:[]};
+    if(!s.practiceNotes)s={...s,practiceNotes:""};
+    return s;
+  }
+  const [s,setS]=useState(migrate(session||blank));
+
+  const tog=d=>{
+    const hasDays=s.practiceDays.includes(d);
+    const newDays=hasDays?s.practiceDays.filter(x=>x!==d):[...s.practiceDays,d];
+    const newDetails=hasDays?s.practiceDayDetails.filter(x=>x.day!==d):[...s.practiceDayDetails,{day:d,time:s.practiceTime||"",timeEnd:"",location:s.practiceLocation||""}];
+    setS({...s,practiceDays:newDays,practiceDayDetails:newDetails});
+  };
+  function updDetail(day,field,val){
+    setS({...s,practiceDayDetails:s.practiceDayDetails.map(d=>d.day===day?{...d,[field]:val}:d)});
+  }
+  // keep legacy practiceTime in sync with first day for backwards compat
+  function save(){
+    const first=s.practiceDayDetails[0];
+    onSave({...s,practiceTime:first?first.time:s.practiceTime,practiceLocation:first?first.location:s.practiceLocation});
+  }
+
   return(
     <Modal title={session?"Edit session":"Add session"} onClose={onClose} wide>
       <F label="Session name"><Inp value={s.name} onChange={v=>setS({...s,name:v})} placeholder="e.g. Spring 2026"/></F>
@@ -222,21 +244,33 @@ function SessionModal({session,onSave,onClose}){
         <F label="End date"><Inp type="date" value={s.end} onChange={v=>setS({...s,end:v})}/></F>
       </div>
       <F label="Cost ($)"><Inp type="number" value={s.cost} onChange={v=>setS({...s,cost:v})}/></F>
-      <F label="Practice days">
-        <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+      <F label="Practice days — click to toggle, then set time per day">
+        <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:s.practiceDays.length?10:0}}>
           {DAYS.map(d=><button key={d} onClick={()=>tog(d)} style={{padding:"4px 10px",borderRadius:6,border:`1px solid ${s.practiceDays.includes(d)?C.accent:C.border}`,background:s.practiceDays.includes(d)?C.accent:C.card2,color:s.practiceDays.includes(d)?"#fff":C.text2,cursor:"pointer",fontSize:12}}>{d}</button>)}
         </div>
+        {DAYS.filter(d=>s.practiceDays.includes(d)).map(d=>{
+          const det=s.practiceDayDetails.find(x=>x.day===d)||{time:"",timeEnd:"",location:""};
+          return(
+            <div key={d} style={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 12px",marginBottom:6}}>
+              <div style={{fontSize:12,fontWeight:600,color:C.accent,marginBottom:6}}>{d}</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 2fr",gap:8}}>
+                <F label="Start time"><Inp value={det.time} onChange={v=>updDetail(d,"time",v)} placeholder="4:00 PM"/></F>
+                <F label="End time"><Inp value={det.timeEnd} onChange={v=>updDetail(d,"timeEnd",v)} placeholder="6:00 PM"/></F>
+                <F label="Location"><AddrInp value={det.location} onChange={v=>updDetail(d,"location",v)} placeholder="Practice location"/></F>
+              </div>
+            </div>
+          );
+        })}
       </F>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        <F label="Practice time"><Inp value={s.practiceTime} onChange={v=>setS({...s,practiceTime:v})} placeholder="4:00 PM"/></F>
-        <F label="Practice location"><AddrInp value={s.practiceLocation} onChange={v=>setS({...s,practiceLocation:v})} placeholder="Where practices are held"/></F>
-      </div>
+      <F label="Practice notes (optional)">
+        <textarea value={s.practiceNotes} onChange={e=>setS({...s,practiceNotes:e.target.value})} placeholder="e.g. Bring cleats on Fridays, meet at back entrance on Thursdays..." rows={3} style={{width:"100%",background:C.card2,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",fontSize:13,color:C.text,resize:"vertical",boxSizing:"border-box",fontFamily:"inherit"}}/>
+      </F>
       <F label="Enrollment">
         <div style={{display:"flex",gap:8}}>
           {[true,false].map(b=><button key={String(b)} onClick={()=>setS({...s,enrolled:b})} style={{padding:"6px 16px",borderRadius:7,border:`1px solid ${s.enrolled===b?C.accent:C.border}`,background:s.enrolled===b?C.accent:C.card2,color:s.enrolled===b?"#fff":C.text2,cursor:"pointer",fontSize:13}}>{b?"Enrolled":"Reference only"}</button>)}
         </div>
       </F>
-      <div style={{display:"flex",gap:10,marginTop:10}}><Btn onClick={onClose} variant="secondary">Cancel</Btn><Btn onClick={()=>onSave(s)}>Save session</Btn></div>
+      <div style={{display:"flex",gap:10,marginTop:10}}><Btn onClick={onClose} variant="secondary">Cancel</Btn><Btn onClick={save}>Save session</Btn></div>
     </Modal>
   );
 }
@@ -341,8 +375,13 @@ function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClic
         const start=new Date(sess.start),end=new Date(sess.end);
         const cur=new Date(start);
         while(cur<=end){
-          if(DAYS[cur.getDay()]&&sess.practiceDays.includes(DAYS[cur.getDay()]))
-            events.push({date:cur.toISOString().slice(0,10),type:"practice",label:sp.name,sub:sess.practiceTime,kidKey:sp.kidKey,color:sc.txt,bg:sc.bg,border:sc.border,sportId:sp.id,sessionId:sess.id,meetId:null});
+          const dayName=DAYS[cur.getDay()];
+          if(dayName&&sess.practiceDays.includes(dayName)){
+            const det=(sess.practiceDayDetails||[]).find(x=>x.day===dayName);
+            const timeLabel=det?det.time:sess.practiceTime;
+            const subLabel=det?(det.time+(det.timeEnd?` – ${det.timeEnd}`:"")+( det.location?` · ${det.location}`:"")):sess.practiceTime;
+            events.push({date:cur.toISOString().slice(0,10),type:"practice",label:sp.name,sub:subLabel||timeLabel,kidKey:sp.kidKey,color:sc.txt,bg:sc.bg,border:sc.border,sportId:sp.id,sessionId:sess.id,meetId:null});
+          }
           cur.setDate(cur.getDate()+1);
         }
         sess.meets.forEach(m=>{
@@ -387,14 +426,16 @@ function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClic
           <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)"}}>
             {DAYS.map((d,i)=><div key={d} style={{textAlign:"center",fontSize:11,fontWeight:600,color:C.text2,padding:"8px 0",background:C.card3,borderRight:i<6?`1px solid ${C.border}`:"none"}}>{d}</div>)}
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)"}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gridAutoRows:"minmax(88px,auto)"}}>
             {cells.map((d,i)=>{
-              if(!d)return <div key={i} style={{minHeight:80,background:"#13151F",borderRight:i%7<6?`1px solid ${C.border}`:"none",borderTop:`1px solid ${C.border}`}}/>;
+              const col=i%7;
+              const borderR=col<6?`1px solid ${C.border}`:"none";
+              if(!d)return <div key={i} style={{background:"#13151F",borderRight:borderR,borderTop:`1px solid ${C.border}`}}/>;
               const ds=`${yr}-${String(mo+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
               const evs=evOn(ds);
               const isToday=today.getDate()===d&&today.getMonth()===mo&&today.getFullYear()===yr;
               return(
-                <div key={i} style={{minHeight:80,background:isToday?"#0F1D35":C.card,borderRight:i%7<6?`1px solid ${C.border}`:"none",borderTop:`1px solid ${C.border}`,padding:"3px 4px"}}>
+                <div key={i} style={{background:isToday?"#0F1D35":C.card,borderRight:borderR,borderTop:`1px solid ${C.border}`,padding:"4px 4px 4px 4px"}}>
                   <div onClick={()=>{setCurDate(new Date(yr,mo,d));setViewMode("day");}} style={{fontSize:12,fontWeight:isToday?700:400,display:"inline-flex",alignItems:"center",justifyContent:"center",width:22,height:22,borderRadius:"50%",background:isToday?C.accent:"transparent",color:isToday?"#fff":C.text3,marginBottom:2,cursor:"pointer"}}>{d}</div>
                   {evs.slice(0,3).map((e,ei)=><div key={ei} onClick={()=>onEventClick(e)} title={e.label} style={{background:e.bg,color:e.color,border:`1px solid ${e.border}`,borderRadius:4,padding:"1px 4px",fontSize:10,fontWeight:500,marginBottom:2,cursor:"pointer",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",opacity:e.notAttending?0.4:1}}>{icon(e.type)} {e.label}</div>)}
                   {evs.length>3&&<div style={{fontSize:9,color:C.text3,cursor:"pointer"}} onClick={()=>{setCurDate(new Date(yr,mo,d));setViewMode("day");}}>+{evs.length-3} more</div>}
@@ -858,12 +899,31 @@ function ActivitiesPage({sports,setSports,conflicts,setConflicts,summerData,sett
       const dayMap={Sun:0,Mon:1,Tue:2,Wed:3,Thu:4,Fri:5,Sat:6};
       const indices=sess.practiceDays.map(d=>dayMap[d]).filter(d=>d!==undefined);
       if(!indices.length)return null;
-      const t=new Date(today2);
-      for(let i=0;i<14;i++){
-        const d=new Date(t);d.setDate(t.getDate()+i);
+      const sessEnd=sess.end?new Date(sess.end+"T12:00:00"):null;
+      for(let i=0;i<21;i++){
+        const d=new Date(today2);d.setDate(today2.getDate()+i);
+        if(sessEnd&&d>sessEnd)break;
         if(indices.includes(d.getDay()))return d;
       }
       return null;
+    }
+    // returns next N upcoming practice dates with per-day details
+    function nextPracticeDates(sess,n=5){
+      if(!sess||!sess.practiceDays||sess.practiceDays.length===0)return[];
+      const dayMap={Sun:0,Mon:1,Tue:2,Wed:3,Thu:4,Fri:5,Sat:6};
+      const indices=sess.practiceDays.map(d=>dayMap[d]).filter(d=>d!==undefined);
+      const sessEnd=sess.end?new Date(sess.end+"T12:00:00"):null;
+      const results=[];
+      for(let i=0;i<60&&results.length<n;i++){
+        const d=new Date(today2);d.setDate(today2.getDate()+i);
+        if(sessEnd&&d>sessEnd)break;
+        if(indices.includes(d.getDay())){
+          const dayName=DAYS[d.getDay()];
+          const det=(sess.practiceDayDetails||[]).find(x=>x.day===dayName);
+          results.push({date:d,dayName,time:det?det.time:sess.practiceTime,timeEnd:det?det.timeEnd:"",location:det?det.location:sess.practiceLocation});
+        }
+      }
+      return results;
     }
     const nextPrac=activeSess?nextPracticeDate(activeSess):null;
     const diffDays=nextPrac?Math.round((nextPrac-today2)/(1000*60*60*24)):null;
@@ -970,46 +1030,60 @@ function ActivitiesPage({sports,setSports,conflicts,setConflicts,summerData,sett
           <div>
             {/* next up */}
             <div style={{fontSize:11,fontWeight:600,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10}}>Next up</div>
-            {nextPrac&&(
-              <div style={{background:sc.bg,border:`1px solid ${sc.border}`,borderRadius:12,padding:"14px 16px",marginBottom:10}}>
-                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-                  <span style={{fontSize:11,background:"rgba(0,0,0,0.3)",color:sc.txt,padding:"2px 9px",borderRadius:20}}>Practice</span>
-                  <span style={{fontSize:11,background:"#052E16",color:"#4ADE80",padding:"2px 9px",borderRadius:20}}>{nextPracLabel}</span>
-                </div>
-                <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:2}}>{nextPrac.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}</div>
-                <div style={{fontSize:12,color:C.text2}}>{activeSess.practiceTime&&`${activeSess.practiceTime} · `}{activeSess.practiceLocation||sp.location||""}</div>
-              </div>
-            )}
-            {upcomingMeets.slice(0,3).map(m=>{
-              const d=new Date((m.dateStart||m.date)+"T12:00:00");
-              const diff=Math.round((d-today2)/(1000*60*60*24));
-              const lbl=diff===0?"Today":diff===1?"Tomorrow":`In ${diff} days`;
-              return(
-                <div key={m.id} style={{background:sc.bg,border:`1px solid ${sc.border}`,borderRadius:12,padding:"14px 16px",marginBottom:10}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-                    <span style={{fontSize:11,background:"rgba(0,0,0,0.3)",color:sc.txt,padding:"2px 9px",borderRadius:20}}>Meet</span>
-                    <span style={{fontSize:11,background:"#052E16",color:"#4ADE80",padding:"2px 9px",borderRadius:20}}>{lbl}</span>
-                    {m.sessName&&<span style={{fontSize:10,color:C.text3,marginLeft:"auto"}}>{m.sessName}</span>}
+            {(()=>{
+              // build merged upcoming list: next 5 practices + upcoming meets, sorted by date
+              const upPracs=activeSess?nextPracticeDates(activeSess,5).map(p=>({
+                _type:"practice",_date:p.date,dayName:p.dayName,time:p.time,timeEnd:p.timeEnd,location:p.location||activeSess.practiceLocation||sp.location||""
+              })):[];
+              const upMeets=upcomingMeets.slice(0,5).map(m=>({_type:"meet",_date:new Date((m.dateStart||m.date)+"T12:00:00"),...m}));
+              const merged=[...upPracs,...upMeets].sort((a,b)=>a._date-b._date).slice(0,6);
+              if(merged.length===0)return <div style={{textAlign:"center",padding:"20px",color:C.text3,fontSize:13,background:C.card,borderRadius:12,border:`1px solid ${C.border}`,marginBottom:12}}>Nothing coming up — add a meet or check practice days.</div>;
+              return merged.map((item,idx)=>{
+                const diff=Math.round((item._date-today2)/(1000*60*60*24));
+                const lbl=diff===0?"Today":diff===1?"Tomorrow":`In ${diff} days`;
+                if(item._type==="practice") return(
+                  <div key={idx} style={{background:sc.bg,border:`1px solid ${sc.border}`,borderRadius:12,padding:"14px 16px",marginBottom:8}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
+                      <span style={{fontSize:11,background:"rgba(0,0,0,0.3)",color:sc.txt,padding:"2px 9px",borderRadius:20}}>Practice</span>
+                      <span style={{fontSize:11,background:"#052E16",color:"#4ADE80",padding:"2px 9px",borderRadius:20}}>{lbl}</span>
+                    </div>
+                    <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:2}}>{item._date.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}</div>
+                    <div style={{fontSize:12,color:C.text2}}>{item.time}{item.timeEnd?` – ${item.timeEnd}`:""}{item.location?` · ${item.location}`:""}</div>
                   </div>
-                  <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:2}}>{m.name}</div>
-                  <div style={{fontSize:12,color:C.text2}}>{fmtDate(m.dateStart||m.date)}{m.time?` · ${m.time}`:""}{m.location?` · ${m.location}`:""}</div>
-                </div>
-              );
-            })}
-            {!nextPrac&&upcomingMeets.length===0&&<div style={{textAlign:"center",padding:"20px",color:C.text3,fontSize:13,background:C.card,borderRadius:12,border:`1px solid ${C.border}`,marginBottom:12}}>Nothing coming up — add a meet or check practice days.</div>}
+                );
+                return(
+                  <div key={idx} style={{background:"#1A120A",border:`1px solid #78350F`,borderRadius:12,padding:"14px 16px",marginBottom:8}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
+                      <span style={{fontSize:11,background:"rgba(0,0,0,0.3)",color:"#FB923C",padding:"2px 9px",borderRadius:20}}>Meet</span>
+                      <span style={{fontSize:11,background:"#052E16",color:"#4ADE80",padding:"2px 9px",borderRadius:20}}>{lbl}</span>
+                    </div>
+                    <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:2}}>{item.name}</div>
+                    <div style={{fontSize:12,color:C.text2}}>{fmtDate(item.dateStart||item.date)}{item.time?` · ${item.time}`:""}{item.location?` · ${item.location}`:""}</div>
+                  </div>
+                );
+              });
+            })()}
 
             {/* practice schedule summary */}
             {activeSess&&activeSess.practiceDays.length>0&&(
               <>
                 <div style={{fontSize:11,fontWeight:600,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",margin:"18px 0 10px"}}>Practice schedule · {activeSess.name}</div>
                 <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 16px",marginBottom:4}}>
-                  <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
-                    {activeSess.practiceDays.map(d=>(
-                      <span key={d} style={{background:sc.bg,color:sc.txt,border:`1px solid ${sc.border}`,borderRadius:20,padding:"3px 12px",fontSize:12,fontWeight:500}}>{d}</span>
-                    ))}
-                  </div>
-                  <div style={{fontSize:12,color:C.text2,marginBottom:4}}>{activeSess.practiceTime&&`${activeSess.practiceTime} · `}{activeSess.practiceLocation||sp.location||""}</div>
-                  <div style={{fontSize:11,color:C.text3}}>{fmtDate(activeSess.start)} – {fmtDate(activeSess.end)}</div>
+                  {activeSess.practiceDays.map(d=>{
+                    const det=(activeSess.practiceDayDetails||[]).find(x=>x.day===d);
+                    const t=det?det.time:activeSess.practiceTime;
+                    const te=det?det.timeEnd:"";
+                    const loc=det?det.location:activeSess.practiceLocation||sp.location||"";
+                    return(
+                      <div key={d} style={{display:"flex",alignItems:"center",gap:10,background:sc.bg,border:`1px solid ${sc.border}`,borderRadius:8,padding:"7px 12px",marginBottom:5}}>
+                        <span style={{fontWeight:600,fontSize:12,color:sc.txt,width:32,flexShrink:0}}>{d}</span>
+                        <span style={{fontSize:12,color:C.text}}>{t}{te?` – ${te}`:""}</span>
+                        {loc&&<span style={{fontSize:11,color:C.text3,marginLeft:4}}>· {loc}</span>}
+                      </div>
+                    );
+                  })}
+                  {activeSess.practiceNotes&&<div style={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 12px",marginTop:4,fontSize:12,color:C.text2,fontStyle:"italic"}}>📝 {activeSess.practiceNotes}</div>}
+                  <div style={{fontSize:11,color:C.text3,marginTop:6}}>{fmtDate(activeSess.start)} – {fmtDate(activeSess.end)}</div>
                 </div>
               </>
             )}
@@ -1058,13 +1132,22 @@ function ActivitiesPage({sports,setSports,conflicts,setConflicts,summerData,sett
                   <div style={{fontSize:12,color:C.text2,marginBottom:10}}>{fmtDate(sess.start)} – {fmtDate(sess.end)}{sess.cost?` · ${fmtMoney(sess.cost)}`:""}</div>
                   {sess.practiceDays.length>0?(
                     <>
-                      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
-                        {sess.practiceDays.map(d=>(
-                          <span key={d} style={{background:isActiveSess?sc.bg:C.card2,color:isActiveSess?sc.txt:C.text2,border:`1px solid ${isActiveSess?sc.border:C.border}`,borderRadius:20,padding:"3px 12px",fontSize:12,fontWeight:500}}>{d}</span>
-                        ))}
-                      </div>
-                      <div style={{fontSize:12,color:C.text2,marginBottom:4}}>{sess.practiceTime&&`${sess.practiceTime} · `}{sess.practiceLocation||""}</div>
-                      {np&&<span style={{fontSize:11,background:"#052E16",color:"#4ADE80",padding:"2px 10px",borderRadius:20}}>Next: {np.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"})}{nd===0?" — Today":nd===1?" — Tomorrow":""}</span>}
+                      {/* per-day detail rows */}
+                      {sess.practiceDays.map(d=>{
+                        const det=(sess.practiceDayDetails||[]).find(x=>x.day===d);
+                        const t=det?det.time:sess.practiceTime;
+                        const te=det?det.timeEnd:"";
+                        const loc=det?det.location:sess.practiceLocation;
+                        return(
+                          <div key={d} style={{display:"flex",alignItems:"center",gap:10,background:isActiveSess?sc.bg:C.card2,border:`1px solid ${isActiveSess?sc.border:C.border}`,borderRadius:8,padding:"7px 12px",marginBottom:5}}>
+                            <span style={{fontWeight:600,fontSize:12,color:isActiveSess?sc.txt:C.text2,width:32,flexShrink:0}}>{d}</span>
+                            <span style={{fontSize:12,color:C.text}}>{t}{te?` – ${te}`:""}</span>
+                            {loc&&<span style={{fontSize:11,color:C.text3,marginLeft:4}}>· {loc}</span>}
+                          </div>
+                        );
+                      })}
+                      {sess.practiceNotes&&<div style={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 12px",marginTop:4,fontSize:12,color:C.text2,fontStyle:"italic"}}>📝 {sess.practiceNotes}</div>}
+                      {np&&<div style={{marginTop:8}}><span style={{fontSize:11,background:"#052E16",color:"#4ADE80",padding:"2px 10px",borderRadius:20}}>Next: {np.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"})}{nd===0?" — Today":nd===1?" — Tomorrow":""}</span></div>}
                     </>
                   ):(
                     <div style={{fontSize:12,color:C.text3,fontStyle:"italic"}}>No practice days set.</div>
