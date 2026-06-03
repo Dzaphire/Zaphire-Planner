@@ -432,16 +432,16 @@ function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClic
           <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)"}}>
             {DAYS.map((d,i)=><div key={d} style={{textAlign:"center",fontSize:11,fontWeight:600,color:C.text2,padding:"8px 0",background:C.card3,borderRight:i<6?`1px solid ${C.border}`:"none"}}>{d}</div>)}
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gridAutoRows:"minmax(88px,auto)"}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gridTemplateRows:`repeat(${Math.ceil(cells.length/7)},100px)`}}>
             {cells.map((d,i)=>{
               const col=i%7;
               const borderR=col<6?`1px solid ${C.border}`:"none";
-              if(!d)return <div key={i} style={{background:"#13151F",borderRight:borderR,borderTop:`1px solid ${C.border}`}}/>;
+              if(!d)return <div key={i} style={{background:"#13151F",borderRight:borderR,borderTop:`1px solid ${C.border}`,height:"100%"}}/>;
               const ds=`${yr}-${String(mo+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
               const evs=evOn(ds);
               const isToday=today.getDate()===d&&today.getMonth()===mo&&today.getFullYear()===yr;
               return(
-                <div key={i} style={{background:isToday?"#0F1D35":C.card,borderRight:borderR,borderTop:`1px solid ${C.border}`,padding:"4px 4px 4px 4px"}}>
+                <div key={i} style={{background:isToday?"#0F1D35":C.card,borderRight:borderR,borderTop:`1px solid ${C.border}`,padding:"4px",overflow:"hidden"}}>
                   <div onClick={()=>{setCurDate(new Date(yr,mo,d));setViewMode("day");}} style={{fontSize:12,fontWeight:isToday?700:400,display:"inline-flex",alignItems:"center",justifyContent:"center",width:22,height:22,borderRadius:"50%",background:isToday?C.accent:"transparent",color:isToday?"#fff":C.text3,marginBottom:2,cursor:"pointer"}}>{d}</div>
                   {evs.slice(0,3).map((e,ei)=><div key={ei} onClick={()=>onEventClick(e)} title={e.label} style={{background:e.bg,color:e.color,border:`1px solid ${e.border}`,borderRadius:4,padding:"1px 4px",fontSize:10,fontWeight:500,marginBottom:2,cursor:"pointer",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",opacity:e.notAttending?0.4:1}}>{icon(e.type)} {e.label}</div>)}
                   {evs.length>3&&<div style={{fontSize:9,color:C.text3,cursor:"pointer"}} onClick={()=>{setCurDate(new Date(yr,mo,d));setViewMode("day");}}>+{evs.length-3} more</div>}
