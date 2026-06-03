@@ -215,8 +215,14 @@ function SessionModal({session,onSave,onClose}){
   // migrate old sessions that only have practiceTime/practiceLocation
   function migrate(s){
     if(!s)return blank;
-    if(!s.practiceDayDetails)s={...s,practiceDayDetails:[]};
     if(!s.practiceNotes)s={...s,practiceNotes:""};
+    // build practiceDayDetails from existing days if missing or incomplete
+    const existingDetails=s.practiceDayDetails||[];
+    const mergedDetails=(s.practiceDays||[]).map(day=>{
+      const existing=existingDetails.find(x=>x.day===day);
+      return existing||{day,time:s.practiceTime||"",timeEnd:"",location:s.practiceLocation||""};
+    });
+    s={...s,practiceDayDetails:mergedDetails};
     return s;
   }
   const [s,setS]=useState(migrate(session||blank));
