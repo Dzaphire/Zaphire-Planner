@@ -1417,6 +1417,45 @@ function ActivitiesPage({sports,setSports,conflicts,setConflicts,summerData,sett
 }
 
 // ── Summer Section ──
+function SummerEditModal({editing,schedule,weeks,providers,onSave,onClose}){
+  const [a,setA]=useState(schedule[editing.kidKey][editing.weekIdx].a);
+  const [note,setNote]=useState(schedule[editing.kidKey][editing.weekIdx].note);
+  const [cost,setCost]=useState(schedule[editing.kidKey][editing.weekIdx].cost);
+  const names=["JCC","Unscheduled",...providers.filter(p=>p.name!=="JCC").map(p=>p.name)];
+  return(
+    <Modal title={`${editing.kid.name} — ${weeks[editing.weekIdx].label}`} onClose={onClose}>
+      <F label="Activity"><Sel value={a} onChange={setA} options={names}/></F>
+      <F label="Notes"><Inp value={note} onChange={setNote}/></F>
+      <F label="Cost"><Inp value={cost} onChange={setCost} placeholder="$650"/></F>
+      <div style={{display:"flex",gap:10,marginTop:10}}>
+        <Btn onClick={onClose} variant="secondary">Cancel</Btn>
+        <Btn onClick={()=>onSave({a,note,cost})}>Save</Btn>
+      </div>
+    </Modal>
+  );
+}
+
+function SummerAddYearModal({years,kids,onSave,onClose}){
+  const [y,setY]=useState(Math.max(...years)+1);
+  const [nw,setNw]=useState(8);
+  function create(){
+    const wks=Array.from({length:nw},(_,i)=>({n:i+1,label:`Week ${i+1}`,dates:`Week ${i+1}`}));
+    const sched={};
+    kids.forEach(k=>{sched[k.key]=Array(nw).fill(null).map(()=>({a:"Unscheduled",note:"",cost:""}));});
+    onSave(y,{schedule:sched,providers:JSON.parse(JSON.stringify(DEF_PROVIDERS)),weeks:wks,notes:""});
+  }
+  return(
+    <Modal title="Add new summer year" onClose={onClose}>
+      <F label="Year"><Inp type="number" value={y} onChange={v=>setY(Number(v))}/></F>
+      <F label="Weeks"><Inp type="number" value={nw} onChange={v=>setNw(Number(v))}/></F>
+      <div style={{display:"flex",gap:10,marginTop:10}}>
+        <Btn onClick={onClose} variant="secondary">Cancel</Btn>
+        <Btn onClick={create}>Create {y}</Btn>
+      </div>
+    </Modal>
+  );
+}
+
 function SummerSection({yearData,years,activeYear,setActiveYear,onYearDataChange,kids}){
   const [tab,setTab]=useState("dashboard");
   const [editing,setEditing]=useState(null);
@@ -1510,8 +1549,8 @@ function SummerSection({yearData,years,activeYear,setActiveYear,onYearDataChange
         </div>
       )}
       {tab==="costs"&&activeYear!==2026&&<div style={{textAlign:"center",padding:"40px 20px",color:C.text3,fontSize:13}}>Add costs via the schedule for {activeYear}.</div>}
-      {editing&&(()=>{const [a,setA]=useState(schedule[editing.kidKey][editing.weekIdx].a);const [note,setNote]=useState(schedule[editing.kidKey][editing.weekIdx].note);const [cost,setCost]=useState(schedule[editing.kidKey][editing.weekIdx].cost);const names=["JCC","Unscheduled",...providers.filter(p=>p.name!=="JCC").map(p=>p.name)];return <Modal title={`${editing.kid.name} — ${weeks[editing.weekIdx].label}`} onClose={()=>setEditing(null)}><F label="Activity"><Sel value={a} onChange={setA} options={names}/></F><F label="Notes"><Inp value={note} onChange={setNote}/></F><F label="Cost"><Inp value={cost} onChange={setCost} placeholder="$650"/></F><div style={{display:"flex",gap:10,marginTop:10}}><Btn onClick={()=>setEditing(null)} variant="secondary">Cancel</Btn><Btn onClick={()=>saveEntry({a,note,cost})}>Save</Btn></div></Modal>;})()}
-      {addingYear&&(()=>{const [y,setY]=useState(Math.max(...years)+1);const [nw,setNw]=useState(8);return <Modal title="Add new summer year" onClose={()=>setAddingYear(false)}><F label="Year"><Inp type="number" value={y} onChange={v=>setY(Number(v))}/></F><F label="Weeks"><Inp type="number" value={nw} onChange={v=>setNw(Number(v))}/></F><div style={{display:"flex",gap:10,marginTop:10}}><Btn onClick={()=>setAddingYear(false)} variant="secondary">Cancel</Btn><Btn onClick={()=>{const wks=Array.from({length:nw},(_,i)=>({n:i+1,label:`Week ${i+1}`,dates:`Week ${i+1}`}));const sched={};kids.forEach(k=>{sched[k.key]=Array(nw).fill(null).map(()=>({a:"Unscheduled",note:"",cost:""}));});onYearDataChange(y,{schedule:sched,providers:JSON.parse(JSON.stringify(DEF_PROVIDERS)),weeks:wks,notes:""});setAddingYear(false);}}>Create {y}</Btn></div></Modal>;})()}
+      {editing&&<SummerEditModal editing={editing} schedule={schedule} weeks={weeks} providers={providers} onSave={saveEntry} onClose={()=>setEditing(null)}/>}
+      {addingYear&&<SummerAddYearModal years={years} kids={kids} onSave={(y,data)=>{onYearDataChange(y,data);setAddingYear(false);}} onClose={()=>setAddingYear(false)}/>}
     </div>
   );
 }
