@@ -378,7 +378,7 @@ function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClic
       const sc=getSC(sp.name);
       sp.sessions.forEach(sess=>{
         if(!sess.enrolled)return;
-        const start=new Date(sess.start),end=new Date(sess.end);
+        const start=new Date(sess.start+"T12:00:00"),end=new Date(sess.end+"T12:00:00");
         const cur=new Date(start);
         while(cur<=end){
           const dayName=DAYS[cur.getDay()];
@@ -386,7 +386,8 @@ function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClic
             const det=(sess.practiceDayDetails||[]).find(x=>x.day===dayName);
             const timeLabel=det?det.time:sess.practiceTime;
             const subLabel=det?(det.time+(det.timeEnd?` – ${det.timeEnd}`:"")+( det.location?` · ${det.location}`:"")):sess.practiceTime;
-            events.push({date:cur.toISOString().slice(0,10),type:"practice",label:sp.name,sub:subLabel||timeLabel,kidKey:sp.kidKey,color:sc.txt,bg:sc.bg,border:sc.border,sportId:sp.id,sessionId:sess.id,meetId:null});
+            const yy=cur.getFullYear(),mm=String(cur.getMonth()+1).padStart(2,"0"),dd=String(cur.getDate()).padStart(2,"0");
+            events.push({date:`${yy}-${mm}-${dd}`,type:"practice",label:sp.name,sub:subLabel||timeLabel,kidKey:sp.kidKey,color:sc.txt,bg:sc.bg,border:sc.border,sportId:sp.id,sessionId:sess.id,meetId:null});
           }
           cur.setDate(cur.getDate()+1);
         }
@@ -404,7 +405,8 @@ function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClic
         const s=summerData.schedule[k.key]?.[wi];
         if(!s||s.a==="Unscheduled")return;
         const c=getTC(s.a);
-        events.push({date:new Date(2026,5,22+wi*7).toISOString().slice(0,10),type:"summer",label:s.a,sub:wk.dates,kidKey:k.key,color:c.txt,bg:c.bg,border:c.border,sportId:null});
+        const _sd=new Date(2026,5,22+wi*7);const _sds=`${_sd.getFullYear()}-${String(_sd.getMonth()+1).padStart(2,"0")}-${String(_sd.getDate()).padStart(2,"0")}`;
+        events.push({date:_sds,type:"summer",label:s.a,sub:wk.dates,kidKey:k.key,color:c.txt,bg:c.bg,border:c.border,sportId:null});
       });
     });
   }
@@ -468,7 +470,7 @@ function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClic
         </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",border:`1px solid ${C.border}`,borderRadius:10,overflow:"hidden"}}>
           {wds.map((wd,i)=>{
-            const ds=wd.toISOString().slice(0,10),evs=evOn(ds),isToday=wd.toDateString()===today.toDateString();
+            const ds=`${wd.getFullYear()}-${String(wd.getMonth()+1).padStart(2,"0")}-${String(wd.getDate()).padStart(2,"0")}`,evs=evOn(ds),isToday=wd.toDateString()===today.toDateString();
             return(
               <div key={i} style={{minHeight:120,background:isToday?"#0F1D35":C.card,borderRight:i<6?`1px solid ${C.border}`:"none",padding:"6px 5px"}}>
                 <div onClick={()=>{setCurDate(wd);setViewMode("day");}} style={{fontSize:11,fontWeight:600,color:isToday?"#fff":C.text2,marginBottom:4,cursor:"pointer",display:"inline-flex",flexDirection:"column",alignItems:"center",background:isToday?C.accent:"transparent",borderRadius:6,padding:isToday?"2px 6px":"0"}}>
@@ -482,7 +484,7 @@ function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClic
       </div>
     );
   }
-  const ds=curDate.toISOString().slice(0,10),evs=evOn(ds),isToday=curDate.toDateString()===today.toDateString();
+  const ds=`${curDate.getFullYear()}-${String(curDate.getMonth()+1).padStart(2,"0")}-${String(curDate.getDate()).padStart(2,"0")}`,evs=evOn(ds),isToday=curDate.toDateString()===today.toDateString();
   return(
     <div>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
