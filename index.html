@@ -513,7 +513,7 @@ function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClic
 }
 
 // ── Kid Profile Page ──
-function KidProfilePage({kidKey,kids,sports,yearData,years,onBack}){
+function KidProfilePage({kidKey,kids,sports,yearData,years,onBack,onNavigateToSport}){
   const [tab,setTab]=useState("activities");
   const [journalEntry,setJournalEntry]=useState("");
   const [savedNotes,setSavedNotes]=useState([]);
@@ -548,17 +548,58 @@ function KidProfilePage({kidKey,kids,sports,yearData,years,onBack}){
         {TABS.map(t=><button key={t.k} onClick={()=>setTab(t.k)} style={{padding:"7px 16px",borderRadius:8,border:`1px solid ${tab===t.k?kid.color:C.border}`,background:tab===t.k?kid.bg:C.card2,color:tab===t.k?kid.color:C.text2,cursor:"pointer",fontSize:13,fontWeight:tab===t.k?600:400}}>{t.l}</button>)}
       </div>
       {tab==="activities"&&(
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:12}}>
-          {kidSports.length===0&&<div style={{color:C.text3,fontSize:13,padding:"30px",textAlign:"center",gridColumn:"1/-1"}}>No activities yet.</div>}
+        <div>
+          {kidSports.length===0&&<div style={{color:C.text3,fontSize:13,padding:"30px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:12}}>No activities yet.</div>}
           {kidSports.map(sp=>{
             const sc=getSC(sp.name);
             const isActive=sp.sessions.some(s=>s.enrolled);
-            const icon2=SPORT_ICON[sp.name]||"🎯";
+            const activeSess=sp.sessions.find(s=>s.enrolled&&(!s.end||new Date(s.end+"T12:00:00")>=today));
+            const pastSessions=sp.sessions.filter(s=>s.end&&new Date(s.end+"T12:00:00")<today);
             return(
-              <div key={sp.id} style={{background:isActive?sc.bg:C.card2,border:`1.5px solid ${isActive?sc.border:C.border}`,borderRadius:12,padding:16,opacity:isActive?1:0.6}}>
-                <div style={{fontWeight:700,fontSize:14,color:isActive?sc.txt:C.text2,marginBottom:3}}>{sp.name}</div>
-                <div style={{fontSize:12,color:"#64748B",marginBottom:8}}>{sp.teamName}</div>
-                {sp.sessions.map(sess=>{const isPast=sess.end&&new Date(sess.end+"T12:00:00")<today;return(<div key={sess.id} style={{background:"rgba(0,0,0,0.2)",borderRadius:6,padding:"5px 8px",marginBottom:4}}><div style={{fontSize:11,color:isPast?C.text3:sc.txt,fontWeight:500}}>{sess.name}</div><div style={{fontSize:10,color:"#4A5568"}}>{isPast?"Past":sess.enrolled?"Active":"Reference"} · {sess.practiceDays.join(", ")}</div></div>);})}
+              <div key={sp.id} style={{border:`1px solid ${isActive?sc.border:C.border}`,borderLeft:`3px solid ${sc.txt}`,borderRadius:12,marginBottom:10,overflow:"hidden",background:C.card,opacity:isActive?1:0.75}}>
+                {/* sport header — click to go to main sport detail */}
+                <div onClick={()=>onNavigateToSport&&onNavigateToSport(sp.id)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"13px 16px",cursor:"pointer",background:isActive?sc.bg:C.card}}
+                  onMouseEnter={e=>e.currentTarget.style.opacity="0.8"}
+                  onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
+                  <div>
+                    <div style={{fontSize:14,fontWeight:600,color:sc.txt,marginBottom:2}}>{sp.name}</div>
+                    <div style={{fontSize:12,color:C.text2}}>{sp.teamName||sp.location||""}</div>
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    {isActive&&<span style={{fontSize:10,background:"#052E16",color:"#4ADE80",padding:"2px 8px",borderRadius:20}}>Active</span>}
+                    <span style={{fontSize:12,color:C.accent}}>Open ›</span>
+                  </div>
+                </div>
+                {/* sessions list — each clickable */}
+                {sp.sessions.length>0&&(
+                  <div style={{borderTop:`1px solid ${C.border}`}}>
+                    {[...sp.sessions].sort((a,b)=>(b.start||"").localeCompare(a.start||"")).map(sess=>{
+                      const isPast=sess.end&&new Date(sess.end+"T12:00:00")<today;
+                      const isActiveSess=sess.enrolled&&!isPast;
+                      const pracDays=sess.practiceDays||[];
+                      const details=sess.practiceDayDetails||[];
+                      const times=[...new Set(details.map(d=>d.time).filter(Boolean))];
+                      const schedLabel=pracDays.length>0?(times.length===1?`${pracDays.join(" · ")} · ${times[0]}`:pracDays.join(" · ")):"";
+                      return(
+                        <div key={sess.id} onClick={()=>onNavigateToSport&&onNavigateToSport(sp.id,sess.id)}
+                          style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"9px 16px 9px 20px",borderBottom:`1px solid ${C.border}`,cursor:"pointer",opacity:isPast?0.6:1}}
+                          onMouseEnter={e=>e.currentTarget.style.background=C.card2}
+                          onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                          <div>
+                            <div style={{fontSize:12,fontWeight:500,color:isActiveSess?sc.txt:C.text,marginBottom:1}}>{sess.name}</div>
+                            <div style={{fontSize:11,color:C.text3}}>{fmtDate(sess.start)} – {fmtDate(sess.end)}{schedLabel?` · ${schedLabel}`:""}</div>
+                            {sess.meets.length>0&&<div style={{fontSize:10,color:C.text3,marginTop:1}}>{sess.meets.length} meet{sess.meets.length!==1?"s":""}</div>}
+                          </div>
+                          <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+                            {sess.cost&&<span style={{fontSize:11,color:C.text2}}>{fmtMoney(sess.cost)}</span>}
+                            <span style={{fontSize:10,background:isActiveSess?"#052E16":isPast?"#1F2937":"#2D2005",color:isActiveSess?"#4ADE80":isPast?"#6B7280":"#FCD34D",padding:"1px 7px",borderRadius:20}}>{isActiveSess?"Active":isPast?"Past":"Upcoming"}</span>
+                            <span style={{fontSize:11,color:C.text3}}>›</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -799,7 +840,7 @@ function Dashboard({sports,summerData,conflicts,kids,onNavigate}){
 }
 
 // ── Activities Page ──
-function ActivitiesPage({sports,setSports,conflicts,setConflicts,summerData,settings,initialTab,kids,onKidClick}){
+function ActivitiesPage({sports,setSports,conflicts,setConflicts,summerData,settings,initialTab,kids,onKidClick,sportNavTarget,onSportNavConsumed}){
   const [sub,setSub]=useState(initialTab||"calendar");
   const [showSummer,setShowSummer]=useState(true);
   const [showEC,setShowEC]=useState(true);
@@ -807,6 +848,15 @@ function ActivitiesPage({sports,setSports,conflicts,setConflicts,summerData,sett
   const [filterSport,setFilterSport]=useState("all");
   const [selectedSportId,setSelectedSportId]=useState(null);
   const [detailTab,setDetailTab]=useState("overview");
+  // consume navigation target from kid profile
+  useEffect(()=>{
+    if(sportNavTarget&&sportNavTarget.sportId){
+      setSub("activities");
+      setSelectedSportId(sportNavTarget.sportId);
+      setDetailTab(sportNavTarget.sessId?"sessions":"overview");
+      if(onSportNavConsumed)onSportNavConsumed();
+    }
+  },[sportNavTarget]);
   const [addSport,setAddSport]=useState(false);
   const [editSport,setEditSport]=useState(null);
   const [addSession,setAddSession]=useState(null);
@@ -2172,6 +2222,7 @@ function App(){
   const [showSettings,setShowSettings]=useState(false);
   const [settings,setSettings]=useState({sportOptions:DEFAULT_SPORT_OPTIONS});
   const [kids,setKids]=useState(KIDS_DEF);
+  const [sportNavTarget,setSportNavTarget]=useState(null);
   const [houseData,setHouseData]=useState({projects:[],contacts:[],purchases:[],receipts:[]});
 
   useEffect(()=>{
@@ -2207,7 +2258,7 @@ function App(){
     else{setPage(dest);setSubPage(null);setSelectedKidKey(null);if(param)setActivitiesTab(param);}
   }
 
-  const NAV=[{k:"home",icon:"⊞",label:"Home"},{k:"activities",icon:"🎯",label:"Activities"},{k:"summer",icon:"☀️",label:"Summer"},{k:"house",icon:"🏠",label:"73 Weed Hill"}];
+  const NAV=[{k:"home",label:"Home"},{k:"activities",label:"Activities"},{k:"summer",label:"Summer"},{k:"house",label:"73 Weed Hill"}];
 
   if(!authed)return <LoginScreen onLogin={()=>{sessionStorage.setItem("fs_auth","1");setAuthed(true);}}/>;
 
@@ -2232,7 +2283,7 @@ function App(){
   return(
     <div style={{display:"flex",minHeight:"100vh",background:C.bg}}>
       {/* Sidebar */}
-      <div style={{width:210,background:C.card,borderRight:`1px solid ${C.border}`,display:"flex",flexDirection:"column",flexShrink:0,position:"sticky",top:0,height:"100vh",overflowY:"auto"}}>
+      <div style={{width:"clamp(160px,15vw,210px)",background:C.card,borderRight:`1px solid ${C.border}`,display:"flex",flexDirection:"column",flexShrink:0,position:"sticky",top:0,height:"100vh",overflowY:"auto"}}>
         <div style={{padding:"20px 16px 16px",borderBottom:`1px solid ${C.border}`}}>
           <div style={{fontSize:17,fontWeight:700,color:C.text}}>Zaphire</div>
           <div style={{fontSize:11,color:C.text3,marginTop:1}}>Family Planner</div>
@@ -2240,7 +2291,7 @@ function App(){
         <div style={{padding:"10px 8px",flex:1}}>
           {NAV.map(n=>(
             <button key={n.k} onClick={()=>navigate(n.k)} style={{width:"100%",textAlign:"left",padding:"10px 12px",borderRadius:8,border:"none",background:page===n.k&&!subPage?"#1E1B4B":"transparent",color:page===n.k&&!subPage?C.accent:C.text2,cursor:"pointer",fontSize:14,fontWeight:page===n.k&&!subPage?600:400,display:"flex",alignItems:"center",gap:10,marginBottom:3}}>
-              <span style={{fontSize:16}}>{n.icon}</span>{n.label}
+              {n.label}
             </button>
           ))}
         </div>
@@ -2261,7 +2312,7 @@ function App(){
 
       {/* Main */}
       <div style={{flex:1,overflowY:"auto",maxHeight:"100vh"}}>
-        <div style={{maxWidth:860,margin:"0 auto",padding:"22px 20px 40px"}}>
+        <div style={{maxWidth:"100%",width:"100%",padding:"22px 24px 40px",boxSizing:"border-box"}}>
           {/* Breadcrumb */}
           {(page!=="home"||subPage)&&(
             <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:16,fontSize:13,color:C.text3}}>
@@ -2277,8 +2328,8 @@ function App(){
 
           {page==="home"&&!subPage&&<Dashboard sports={sports} summerData={yearData[activeYear]} conflicts={conflicts} kids={kids} onNavigate={navigate}/>}
           {page==="home"&&subPage==="kids-directory"&&<KidsDirectoryPage kids={kids} sports={sports} onSelectKid={k=>navigate("kid-profile",k)} onBack={()=>navigate("home")}/>}
-          {page==="home"&&subPage==="kid-profile"&&<KidProfilePage kidKey={selectedKidKey} kids={kids} sports={sports} yearData={yearData} years={years} onBack={()=>navigate("kids-dir")}/>}
-          {page==="activities"&&<ActivitiesPage sports={sports} setSports={setSports} conflicts={conflicts} setConflicts={setConflicts} summerData={yearData[activeYear]} settings={settings} initialTab={activitiesTab} kids={kids} onKidClick={k=>navigate("kid-profile",k)}/>}
+          {page==="home"&&subPage==="kid-profile"&&<KidProfilePage kidKey={selectedKidKey} kids={kids} sports={sports} yearData={yearData} years={years} onBack={()=>navigate("kids-dir")} onNavigateToSport={(sportId,sessId)=>{setPage("activities");setSubPage(null);setActivitiesTab("activities");setSportNavTarget({sportId,sessId});}}/>}
+          {page==="activities"&&<ActivitiesPage sports={sports} setSports={setSports} conflicts={conflicts} setConflicts={setConflicts} summerData={yearData[activeYear]} settings={settings} initialTab={activitiesTab} kids={kids} onKidClick={k=>navigate("kid-profile",k)} sportNavTarget={sportNavTarget} onSportNavConsumed={()=>setSportNavTarget(null)}/>}
           {page==="summer"&&<SummerSection yearData={yearData} years={years} activeYear={activeYear} setActiveYear={setActiveYear} onYearDataChange={persistYear} kids={kids}/>}
           {page==="house"&&<HousePage data={houseData} onChange={async d=>{setHouseData(d);await store.set(SK.house,d);}}/>}
         </div>
