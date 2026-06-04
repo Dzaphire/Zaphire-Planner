@@ -34,7 +34,7 @@ const {useState,useEffect,useRef}=React;
 const SURL="https://ttdioqltjmgalnbkapzi.supabase.co";
 const SKEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR0ZGlvcWx0am1nYWxuYmthcHppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk4MzU1NjksImV4cCI6MjA5NTQxMTU2OX0.KW5DDiC2FUFMFG7BPH87aFp-alarJijx-aGiHwfUW_I";
 const sb=supabase.createClient(SURL,SKEY);
-const SK={years:"sap-years",year:y=>`sap-summer-${y}`,activities:"sap-activities",settings:"sap-settings",kids:"sap-kids"};
+const SK={years:"sap-years",year:y=>`sap-summer-${y}`,activities:"sap-activities",settings:"sap-settings",kids:"sap-kids",house:"sap-house"};
 const store={
   get:async k=>{try{const{data,error}=await sb.from("app_data").select("value").eq("key",k).single();if(error||!data)return null;return data.value;}catch{return null;}},
   set:async(k,v)=>{try{await sb.from("app_data").upsert({key:k,value:v,updated_at:new Date().toISOString()});}catch(e){console.error(e);}},
@@ -1593,6 +1593,519 @@ function SettingsModal({settings,onSave,allData,onClose,kids,onSaveKid}){
   );
 }
 
+
+// ── House Page ──
+const HOUSE_FLOORS = [
+  {label:"Basement", rooms:["Laundry room","Bathroom","Maintenance room","Bedroom (basement)","Family room","Hallway"]},
+  {label:"1st floor", rooms:["Mudroom (front of house)","Living room","Office","Dining room","Kitchen","Entry room","Mudroom (back of house)"]},
+  {label:"Greenhouse", rooms:["Greenhouse"]},
+  {label:"2nd floor", rooms:["Master bedroom","Sadie's room","Sunroom (back)","Bathroom","TV room","Office","Shay's room","Stairs"]},
+  {label:"3rd floor", rooms:["Christian's room","Aurora's room","Bathroom","Stairs"]},
+];
+const ALL_ROOMS = HOUSE_FLOORS.flatMap(f=>f.rooms.map(r=>({floor:f.label,room:r,full:`${f.label} · ${r}`})));
+const PROJ_COLORS = ["#378ADD","#E89A3C","#4ADE80","#A78BFA","#F472B6","#38BDF8","#FB923C","#34D399"];
+function projColor(i){return PROJ_COLORS[i%PROJ_COLORS.length];}
+
+// ── Sub-modals (top level to avoid hooks violations) ──
+function ProjectModal({project,onSave,onClose}){
+  const blank={id:Date.now()+"",name:"",status:"active",startDate:"",endDate:"",notes:"",rooms:[],payments:[],accountNote:""};
+  const [p,setP]=useState(project||blank);
+  function togRoom(full){setP({...p,rooms:p.rooms.includes(full)?p.rooms.filter(r=>r!==full):[...p.rooms,full]});}
+  function addPayment(){setP({...p,payments:[...p.payments,{id:Date.now()+"",contractor:"",amount:"",date:"",account:"",note:""}]});}
+  function updPayment(id,field,val){setP({...p,payments:p.payments.map(pay=>pay.id===id?{...pay,[field]:val}:pay)});}
+  function delPayment(id){setP({...p,payments:p.payments.filter(pay=>pay.id!==id)});}
+  const total=p.payments.reduce((s,pay)=>s+Number(pay.amount||0),0);
+  return(
+    <Modal title={project?"Edit project":"New project"} onClose={onClose} wide>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <F label="Project name"><Inp value={p.name} onChange={v=>setP({...p,name:v})} placeholder="e.g. Kitchen renovation"/></F>
+        <F label="Status">
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            {["planned","active","done"].map(s=><button key={s} onClick={()=>setP({...p,status:s})} style={{padding:"5px 14px",borderRadius:7,border:`1px solid ${p.status===s?C.accent:C.border}`,background:p.status===s?C.accent:C.card2,color:p.status===s?"#fff":C.text2,cursor:"pointer",fontSize:12,textTransform:"capitalize"}}>{s}</button>)}
+          </div>
+        </F>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <F label="Start date"><Inp type="date" value={p.startDate} onChange={v=>setP({...p,startDate:v})}/></F>
+        <F label="End date"><Inp type="date" value={p.endDate} onChange={v=>setP({...p,endDate:v})}/></F>
+      </div>
+      <F label="Rooms worked on">
+        <div style={{maxHeight:180,overflowY:"auto",border:`1px solid ${C.border}`,borderRadius:8,padding:8}}>
+          {HOUSE_FLOORS.map(fl=>(
+            <div key={fl.label} style={{marginBottom:8}}>
+              <div style={{fontSize:10,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em",color:C.text3,marginBottom:4,paddingBottom:3,borderBottom:`1px solid ${C.border}`}}>{fl.label}</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                {fl.rooms.map(r=>{const full=`${fl.label} · ${r}`;const on=p.rooms.includes(full);return(
+                  <button key={r} onClick={()=>togRoom(full)} style={{padding:"2px 9px",borderRadius:5,border:`1px solid ${on?C.accent:C.border}`,background:on?C.accent:C.card2,color:on?"#fff":C.text2,cursor:"pointer",fontSize:11}}>{r}</button>
+                );})}
+              </div>
+            </div>
+          ))}
+        </div>
+      </F>
+      <F label={`Payments — running total: ${fmtMoney(total)}`}>
+        {p.payments.map(pay=>(
+          <div key={pay.id} style={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 12px",marginBottom:6}}>
+            <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr",gap:8,marginBottom:6}}>
+              <F label="Contractor/Vendor"><Inp value={pay.contractor} onChange={v=>updPayment(pay.id,"contractor",v)} placeholder="Company or person"/></F>
+              <F label="Amount ($)"><Inp type="number" value={pay.amount} onChange={v=>updPayment(pay.id,"amount",v)}/></F>
+              <F label="Date"><Inp type="date" value={pay.date} onChange={v=>updPayment(pay.id,"date",v)}/></F>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:8,alignItems:"flex-end"}}>
+              <F label="Account"><Inp value={pay.account} onChange={v=>updPayment(pay.id,"account",v)} placeholder="Chase ···4821"/></F>
+              <F label="Note"><Inp value={pay.note} onChange={v=>updPayment(pay.id,"note",v)} placeholder="Optional"/></F>
+              <Btn onClick={()=>delPayment(pay.id)} variant="danger" small>✕</Btn>
+            </div>
+          </div>
+        ))}
+        <button onClick={addPayment} style={{width:"100%",padding:"7px",borderRadius:7,border:`1px dashed ${C.border}`,background:"transparent",cursor:"pointer",fontSize:12,color:C.text3,marginTop:2}}>+ Add payment</button>
+      </F>
+      <F label="Notes">
+        <textarea value={p.notes} onChange={e=>setP({...p,notes:e.target.value})} rows={3} placeholder="Project notes, reminders, follow-ups..." style={{width:"100%",background:C.card2,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",fontSize:13,color:C.text,resize:"vertical",boxSizing:"border-box",fontFamily:"inherit"}}/>
+      </F>
+      <div style={{display:"flex",gap:10,marginTop:10}}><Btn onClick={onClose} variant="secondary">Cancel</Btn><Btn onClick={()=>onSave(p)}>Save project</Btn></div>
+    </Modal>
+  );
+}
+
+function ContactModal({contact,onSave,onClose}){
+  const blank={id:Date.now()+"",name:"",company:"",phone:"",email:"",address:"",notes:"",trade:""};
+  const [c,setC]=useState(contact||blank);
+  return(
+    <Modal title={contact?"Edit contact":"Add contact"} onClose={onClose} wide>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <F label="Name"><Inp value={c.name} onChange={v=>setC({...c,name:v})} placeholder="Full name"/></F>
+        <F label="Company"><Inp value={c.company} onChange={v=>setC({...c,company:v})} placeholder="Company name"/></F>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <F label="Phone"><Inp value={c.phone} onChange={v=>setC({...c,phone:v})} placeholder="(203) 555-0100"/></F>
+        <F label="Email"><Inp value={c.email} onChange={v=>setC({...c,email:v})} placeholder="email@example.com"/></F>
+      </div>
+      <F label="Trade / Specialty"><Inp value={c.trade} onChange={v=>setC({...c,trade:v})} placeholder="e.g. Plumber, Electrician, General contractor"/></F>
+      <F label="Address"><AddrInp value={c.address} onChange={v=>setC({...c,address:v})} placeholder="Business address"/></F>
+      <F label="Notes"><textarea value={c.notes} onChange={e=>setC({...c,notes:e.target.value})} rows={2} placeholder="Additional notes..." style={{width:"100%",background:C.card2,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",fontSize:13,color:C.text,resize:"vertical",boxSizing:"border-box",fontFamily:"inherit"}}/></F>
+      <div style={{display:"flex",gap:10,marginTop:10}}><Btn onClick={onClose} variant="secondary">Cancel</Btn><Btn onClick={()=>onSave(c)}>Save contact</Btn></div>
+    </Modal>
+  );
+}
+
+function PurchaseModal({purchase,projects,onSave,onClose}){
+  const blank={id:Date.now()+"",item:"",store:"",amount:"",date:"",room:"",projectId:"",account:"",notes:""};
+  const [p,setP]=useState(purchase||blank);
+  return(
+    <Modal title={purchase?"Edit purchase":"Add purchase"} onClose={onClose} wide>
+      <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:10}}>
+        <F label="Item / Description"><Inp value={p.item} onChange={v=>setP({...p,item:v})} placeholder="What was purchased"/></F>
+        <F label="Amount ($)"><Inp type="number" value={p.amount} onChange={v=>setP({...p,amount:v})}/></F>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <F label="Store / Vendor"><Inp value={p.store} onChange={v=>setP({...p,store:v})} placeholder="Home Depot, Wayfair..."/></F>
+        <F label="Date"><Inp type="date" value={p.date} onChange={v=>setP({...p,date:v})}/></F>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <F label="Room">
+          <select value={p.room} onChange={e=>setP({...p,room:e.target.value})} style={{width:"100%",padding:"8px 12px",borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,background:C.card2,color:C.text}}>
+            <option value="">Select room...</option>
+            {HOUSE_FLOORS.map(fl=>(<optgroup key={fl.label} label={fl.label}>{fl.rooms.map(r=><option key={r} value={`${fl.label} · ${r}`}>{r}</option>)}</optgroup>))}
+          </select>
+        </F>
+        <F label="Project (optional)">
+          <select value={p.projectId} onChange={e=>setP({...p,projectId:e.target.value})} style={{width:"100%",padding:"8px 12px",borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,background:C.card2,color:C.text}}>
+            <option value="">None</option>
+            {projects.map(pr=><option key={pr.id} value={pr.id}>{pr.name}</option>)}
+          </select>
+        </F>
+      </div>
+      <F label="Account"><Inp value={p.account} onChange={v=>setP({...p,account:v})} placeholder="Chase ···4821"/></F>
+      <F label="Notes"><Inp value={p.notes} onChange={v=>setP({...p,notes:v})} placeholder="Optional notes"/></F>
+      <div style={{display:"flex",gap:10,marginTop:10}}><Btn onClick={onClose} variant="secondary">Cancel</Btn><Btn onClick={()=>onSave(p)}>Save purchase</Btn></div>
+    </Modal>
+  );
+}
+
+function HousePage({data,onChange}){
+  const [tab,setTab]=useState("dashboard");
+  const [editProject,setEditProject]=useState(null);
+  const [addProject,setAddProject]=useState(false);
+  const [editContact,setEditContact]=useState(null);
+  const [addContact,setAddContact]=useState(false);
+  const [editPurchase,setEditPurchase]=useState(null);
+  const [addPurchase,setAddPurchase]=useState(false);
+  const [roomsFloor,setRoomsFloor]=useState(null);
+  const [selectedRoom,setSelectedRoom]=useState(null);
+
+  const {projects=[],contacts=[],purchases=[],receipts=[]}=data;
+
+  function saveProject(p){
+    const exists=projects.find(x=>x.id===p.id);
+    const updated=exists?projects.map(x=>x.id===p.id?p:x):[...projects,p];
+    onChange({...data,projects:updated});
+    setEditProject(null);setAddProject(false);
+  }
+  function deleteProject(id){onChange({...data,projects:projects.filter(p=>p.id!==id)});}
+  function saveContact(c){
+    const exists=contacts.find(x=>x.id===c.id);
+    const updated=exists?contacts.map(x=>x.id===c.id?c:x):[...contacts,c];
+    onChange({...data,contacts:updated});
+    setEditContact(null);setAddContact(false);
+  }
+  function deleteContact(id){onChange({...data,contacts:contacts.filter(c=>c.id!==id)});}
+  function savePurchase(p){
+    const exists=purchases.find(x=>x.id===p.id);
+    const updated=exists?purchases.map(x=>x.id===p.id?p:x):[...purchases,p];
+    onChange({...data,purchases:updated});
+    setEditPurchase(null);setAddPurchase(false);
+  }
+  function deletePurchase(id){onChange({...data,purchases:purchases.filter(p=>p.id!==id)});}
+
+  const totalSpent=projects.reduce((s,p)=>s+p.payments.reduce((ps,pay)=>ps+Number(pay.amount||0),0),0);
+  const activeProjs=projects.filter(p=>p.status==="active");
+  const doneProjs=projects.filter(p=>p.status==="done");
+
+  const TABS=[{k:"dashboard",l:"Dashboard"},{k:"timeline",l:"Timeline"},{k:"projects",l:"Projects"},{k:"rooms",l:"Rooms"},{k:"contacts",l:"Contacts"},{k:"purchases",l:"Purchases"},{k:"receipts",l:"Receipts"}];
+
+  function StatusPill({status}){
+    const map={active:{bg:"#052E16",color:"#4ADE80",label:"Active"},done:{bg:"#1a1a2e",color:"#A78BFA",label:"Done"},planned:{bg:"#1a1206",color:"#FCD34D",label:"Planned"}};
+    const s=map[status]||map.planned;
+    return <span style={{fontSize:10,background:s.bg,color:s.color,padding:"2px 8px",borderRadius:20,fontWeight:500}}>{s.label}</span>;
+  }
+
+  function projTotal(p){return p.payments.reduce((s,pay)=>s+Number(pay.amount||0),0);}
+
+  // ── Dashboard tab ──
+  function renderDashboard(){
+    return(
+      <div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:24}}>
+          {[{val:fmtMoney(totalSpent),lbl:"Total spent"},{val:activeProjs.length,lbl:"Active projects",color:"#4ADE80"},{val:doneProjs.length,lbl:"Completed"},{val:contacts.length,lbl:"Contacts saved"}].map((s,i)=>(
+            <div key={i} style={{background:C.card2,borderRadius:10,padding:"12px 14px",border:`1px solid ${C.border}`}}>
+              <div style={{fontSize:20,fontWeight:600,color:s.color||C.text,marginBottom:2}}>{s.val}</div>
+              <div style={{fontSize:10,color:C.text3,textTransform:"uppercase",letterSpacing:"0.05em"}}>{s.lbl}</div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:24}}>
+          {[
+            {tab:"timeline",icon:"⏱",title:"Timeline",desc:"All projects in chronological order with payments and notes.",color:"#378ADD",preview:projects.slice(0,3).map(p=>({label:p.name,status:p.status}))},
+            {tab:"projects",icon:"🔧",title:"Projects",desc:"Full project detail — payments, contractors, rooms, notes.",color:"#E89A3C",preview:[{label:`${projects.length} total projects`},{label:`${fmtMoney(totalSpent)} total spent`}]},
+            {tab:"rooms",icon:"🏠",title:"Rooms",desc:"Browse by floor. See what work has been done in each area.",color:"#4ADE80",preview:HOUSE_FLOORS.slice(0,3).map(f=>({label:f.label,count:projects.filter(p=>p.rooms.some(r=>r.startsWith(f.label))).length}))},
+          ].map(card=>(
+            <div key={card.tab} onClick={()=>setTab(card.tab)} style={{border:`1px solid ${C.border}`,borderRadius:12,padding:16,cursor:"pointer",background:C.card,borderTop:`3px solid ${card.color}`,transition:"border-color 0.12s"}}
+              onMouseEnter={e=>e.currentTarget.style.borderColor=card.color}
+              onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
+              <div style={{fontSize:22,marginBottom:8}}>{card.icon}</div>
+              <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:4}}>{card.title}</div>
+              <div style={{fontSize:12,color:C.text2,marginBottom:12,lineHeight:1.5}}>{card.desc}</div>
+              <div style={{borderTop:`1px solid ${C.border}`,paddingTop:10}}>
+                {card.preview.map((row,i)=>(
+                  <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:11,color:C.text2,padding:"2px 0"}}>
+                    <span>{row.label}</span>
+                    {row.status&&<StatusPill status={row.status}/>}
+                    {row.count!==undefined&&<span style={{color:C.text3}}>{row.count} project{row.count!==1?"s":""}</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {activeProjs.length>0&&(
+          <>
+            <div style={{fontSize:11,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em",color:C.text3,marginBottom:10}}>Active right now</div>
+            {activeProjs.map((p,i)=>(
+              <div key={p.id} style={{border:`1px solid ${C.border}`,borderLeft:`3px solid ${projColor(i)}`,borderRadius:10,padding:"12px 16px",marginBottom:8,background:C.card}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:p.notes?6:0}}>
+                  <div>
+                    <div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:2}}>{p.name}</div>
+                    <div style={{fontSize:11,color:C.text2}}>{p.rooms.slice(0,3).join(" · ")}{p.rooms.length>3?` +${p.rooms.length-3} more`:""}</div>
+                  </div>
+                  <span style={{fontSize:13,fontWeight:600,color:projColor(i)}}>{fmtMoney(projTotal(p))}</span>
+                </div>
+                {p.notes&&<div style={{fontSize:11,color:C.text2,background:C.card2,padding:"6px 10px",borderRadius:6,marginTop:6,fontStyle:"italic",lineHeight:1.5}}>{p.notes.slice(0,200)}{p.notes.length>200?"…":""}</div>}
+              </div>
+            ))}
+          </>
+        )}
+
+        <div style={{fontSize:11,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em",color:C.text3,margin:"20px 0 10px"}}>Quick access</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
+          {[
+            {tab:"contacts",bg:"#0A1F35",color:"#38BDF8",icon:"👥",title:"Contacts",sub:`${contacts.length} contractors & vendors`},
+            {tab:"purchases",bg:"#052E16",color:"#4ADE80",icon:"🛒",title:"Purchases",sub:`${purchases.length} items tracked`},
+            {tab:"receipts",bg:"#2D1A05",color:"#FB923C",icon:"📄",title:"Receipts",sub:`${receipts.length} PDFs stored`},
+          ].map(card=>(
+            <div key={card.tab} onClick={()=>setTab(card.tab)} style={{border:`1px solid ${C.border}`,borderRadius:10,padding:"12px 14px",cursor:"pointer",background:C.card,display:"flex",alignItems:"center",gap:12}}
+              onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent}
+              onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
+              <div style={{width:36,height:36,borderRadius:8,background:card.bg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{card.icon}</div>
+              <div><div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:1}}>{card.title}</div><div style={{fontSize:11,color:C.text2}}>{card.sub}</div></div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Timeline tab ──
+  function renderTimeline(){
+    const sorted=[...projects].sort((a,b)=>{
+      const order={active:0,planned:1,done:2};
+      if(order[a.status]!==order[b.status])return order[a.status]-order[b.status];
+      return (b.startDate||"").localeCompare(a.startDate||"");
+    });
+    if(sorted.length===0)return <div style={{textAlign:"center",padding:"40px",color:C.text3,fontSize:13}}>No projects yet. Add your first project.</div>;
+    return(
+      <div>
+        {sorted.map((p,i)=>(
+          <div key={p.id} style={{display:"flex",gap:14,marginBottom:4}}>
+            <div style={{display:"flex",flexDirection:"column",alignItems:"center",width:32,flexShrink:0}}>
+              <div style={{width:10,height:10,borderRadius:"50%",background:projColor(i),marginTop:14,flexShrink:0}}></div>
+              {i<sorted.length-1&&<div style={{width:2,flex:1,background:C.border,margin:"3px 0"}}></div>}
+            </div>
+            <div style={{flex:1,border:`1px solid ${C.border}`,borderLeft:`3px solid ${projColor(i)}`,borderRadius:12,padding:"14px 16px",marginBottom:12,background:C.card}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+                <div>
+                  <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:3}}>{p.name}</div>
+                  <div style={{fontSize:11,color:C.text2}}>{p.startDate?fmtDate(p.startDate):""}{p.endDate?` – ${fmtDate(p.endDate)}`:p.status==="active"?" – present":""}</div>
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:10}}>
+                  <span style={{fontSize:13,fontWeight:600,color:projColor(i)}}>{fmtMoney(projTotal(p))}</span>
+                  <StatusPill status={p.status}/>
+                  <Btn onClick={()=>setEditProject(p)} variant="secondary" small>Edit</Btn>
+                </div>
+              </div>
+              {p.rooms.length>0&&<div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:8}}>{p.rooms.map(r=><span key={r} style={{fontSize:10,padding:"1px 8px",borderRadius:4,background:C.card2,border:`1px solid ${C.border}`,color:C.text2}}>{r}</span>)}</div>}
+              {p.payments.length>0&&(
+                <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:p.notes?8:0}}>
+                  {p.payments.map(pay=><span key={pay.id} style={{fontSize:10,padding:"2px 9px",borderRadius:20,background:C.card2,border:`1px solid ${C.border}`,color:C.text2}}>{pay.contractor}{pay.amount?` · ${fmtMoney(Number(pay.amount))}`:""}</span>)}
+                </div>
+              )}
+              {p.notes&&<div style={{fontSize:11,color:C.text2,background:C.card2,padding:"8px 11px",borderRadius:7,fontStyle:"italic",lineHeight:1.6}}>{p.notes}</div>}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // ── Projects tab ──
+  function renderProjects(){
+    return(
+      <div>
+        <div style={{display:"flex",justifyContent:"flex-end",marginBottom:14}}>
+          <Btn onClick={()=>setAddProject(true)}>+ New project</Btn>
+        </div>
+        {projects.length===0&&<div style={{textAlign:"center",padding:"40px",color:C.text3,fontSize:13,border:`1px dashed ${C.border}`,borderRadius:12}}>No projects yet.</div>}
+        {projects.map((p,i)=>(
+          <div key={p.id} style={{border:`1px solid ${C.border}`,borderLeft:`3px solid ${projColor(i)}`,borderRadius:12,marginBottom:10,overflow:"hidden",background:C.card}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr auto",alignItems:"center",gap:12,padding:"14px 16px"}}>
+              <div>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
+                  <span style={{fontSize:14,fontWeight:600,color:C.text}}>{p.name}</span>
+                  <StatusPill status={p.status}/>
+                </div>
+                <div style={{fontSize:11,color:C.text2}}>{p.rooms.slice(0,4).join(" · ")}{p.rooms.length>4?` +${p.rooms.length-4} more`:""}</div>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <span style={{fontSize:14,fontWeight:600,color:projColor(i)}}>{fmtMoney(projTotal(p))}</span>
+                <Btn onClick={()=>setEditProject(p)} variant="secondary" small>Edit</Btn>
+                <Btn onClick={()=>deleteProject(p.id)} variant="danger" small>✕</Btn>
+              </div>
+            </div>
+            {(p.payments.length>0||p.notes)&&(
+              <div style={{borderTop:`1px solid ${C.border}`,padding:"12px 16px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                {p.payments.length>0&&(
+                  <div>
+                    <div style={{fontSize:10,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em",color:C.text3,marginBottom:8}}>Payments</div>
+                    {p.payments.map(pay=>(
+                      <div key={pay.id} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"4px 0",borderBottom:`1px solid ${C.border}`}}>
+                        <div><span style={{color:C.text}}>{pay.contractor}</span>{pay.date&&<span style={{color:C.text3,marginLeft:6}}>{fmtDate(pay.date)}</span>}</div>
+                        <div style={{display:"flex",gap:10,alignItems:"center"}}>
+                          {pay.account&&<span style={{fontSize:10,color:C.text3}}>{pay.account}</span>}
+                          <span style={{color:"#4ADE80",fontWeight:500}}>{fmtMoney(Number(pay.amount||0))}</span>
+                        </div>
+                      </div>
+                    ))}
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"5px 0",fontWeight:600}}>
+                      <span>Total</span><span style={{color:projColor(i)}}>{fmtMoney(projTotal(p))}</span>
+                    </div>
+                  </div>
+                )}
+                {p.notes&&(
+                  <div>
+                    <div style={{fontSize:10,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em",color:C.text3,marginBottom:8}}>Notes</div>
+                    <div style={{fontSize:12,color:C.text2,lineHeight:1.6,fontStyle:"italic",background:C.card2,padding:"8px 10px",borderRadius:7}}>{p.notes}</div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // ── Rooms tab ──
+  function renderRooms(){
+    return(
+      <div>
+        {HOUSE_FLOORS.map(fl=>{
+          const isOpen=roomsFloor===fl.label;
+          return(
+            <div key={fl.label} style={{border:`1px solid ${C.border}`,borderRadius:12,marginBottom:10,overflow:"hidden",background:C.card}}>
+              <div onClick={()=>setRoomsFloor(isOpen?null:fl.label)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",cursor:"pointer",background:isOpen?C.card2:C.card}}>
+                <div style={{fontSize:14,fontWeight:600,color:C.text}}>{fl.label}</div>
+                <div style={{display:"flex",alignItems:"center",gap:10}}>
+                  <span style={{fontSize:11,color:C.text3}}>{fl.rooms.length} rooms</span>
+                  <span style={{fontSize:18,color:C.text3,transform:isOpen?"rotate(90deg)":"none",transition:"transform 0.15s"}}>›</span>
+                </div>
+              </div>
+              {isOpen&&(
+                <div style={{borderTop:`1px solid ${C.border}`,padding:12,display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(170px,1fr))",gap:8}}>
+                  {fl.rooms.map(r=>{
+                    const full=`${fl.label} · ${r}`;
+                    const roomProjs=projects.filter(p=>p.rooms.includes(full));
+                    const isSelected=selectedRoom===full;
+                    return(
+                      <div key={r} onClick={()=>setSelectedRoom(isSelected?null:full)}
+                        style={{border:`1px solid ${roomProjs.length>0?C.accent:C.border}`,borderRadius:8,padding:"10px 12px",cursor:"pointer",background:isSelected?C.card2:C.card,transition:"border-color 0.12s"}}
+                        onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent}
+                        onMouseLeave={e=>e.currentTarget.style.borderColor=roomProjs.length>0?C.accent:C.border}>
+                        <div style={{fontSize:12,fontWeight:500,color:C.text,marginBottom:3}}>{r}</div>
+                        <div style={{fontSize:11,color:roomProjs.length>0?C.accent:C.text3}}>{roomProjs.length>0?`${roomProjs.length} project${roomProjs.length>1?"s":""}`:""}</div>
+                        {isSelected&&roomProjs.length>0&&(
+                          <div style={{marginTop:8,borderTop:`1px solid ${C.border}`,paddingTop:8}}>
+                            {roomProjs.map((p,i)=>(
+                              <div key={p.id} style={{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:4}}>
+                                <span style={{color:C.text}}>{p.name}</span>
+                                <StatusPill status={p.status}/>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // ── Contacts tab ──
+  function renderContacts(){
+    return(
+      <div>
+        <div style={{display:"flex",justifyContent:"flex-end",marginBottom:14}}>
+          <Btn onClick={()=>setAddContact(true)}>+ Add contact</Btn>
+        </div>
+        {contacts.length===0&&<div style={{textAlign:"center",padding:"40px",color:C.text3,fontSize:13,border:`1px dashed ${C.border}`,borderRadius:12}}>No contacts yet.</div>}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:10}}>
+          {contacts.map(c=>(
+            <div key={c.id} style={{border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 16px",background:C.card}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+                <div>
+                  <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:1}}>{c.name||c.company||"Unnamed"}</div>
+                  {c.company&&c.name&&<div style={{fontSize:12,color:C.text2}}>{c.company}</div>}
+                  {c.trade&&<div style={{fontSize:11,color:C.accent,marginTop:2}}>{c.trade}</div>}
+                </div>
+                <div style={{display:"flex",gap:4}}>
+                  <Btn onClick={()=>setEditContact(c)} variant="secondary" small>Edit</Btn>
+                  <Btn onClick={()=>deleteContact(c.id)} variant="danger" small>✕</Btn>
+                </div>
+              </div>
+              {c.phone&&<div style={{fontSize:12,color:C.text2,marginBottom:2}}>📞 {c.phone}</div>}
+              {c.email&&<div style={{fontSize:12,color:C.text2,marginBottom:2}}>✉ {c.email}</div>}
+              {c.address&&<div style={{fontSize:11,color:C.text3,marginBottom:2}}>📍 {c.address}</div>}
+              {c.notes&&<div style={{fontSize:11,color:C.text3,marginTop:6,fontStyle:"italic",borderTop:`1px solid ${C.border}`,paddingTop:6}}>{c.notes}</div>}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Purchases tab ──
+  function renderPurchases(){
+    return(
+      <div>
+        <div style={{display:"flex",justifyContent:"flex-end",marginBottom:14}}>
+          <Btn onClick={()=>setAddPurchase(true)}>+ Add purchase</Btn>
+        </div>
+        {purchases.length===0&&<div style={{textAlign:"center",padding:"40px",color:C.text3,fontSize:13,border:`1px dashed ${C.border}`,borderRadius:12}}>No purchases yet.</div>}
+        <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden",background:C.card}}>
+          {purchases.map((p,i)=>{
+            const proj=projects.find(pr=>pr.id===p.projectId);
+            return(
+              <div key={p.id} style={{display:"grid",gridTemplateColumns:"1fr auto auto auto",alignItems:"center",gap:12,padding:"10px 16px",borderBottom:i<purchases.length-1?`1px solid ${C.border}`:"none",background:i%2===0?C.card:C.card2}}>
+                <div>
+                  <div style={{fontSize:13,fontWeight:500,color:C.text,marginBottom:1}}>{p.item}</div>
+                  <div style={{fontSize:11,color:C.text2}}>{p.store}{p.room?` · ${p.room}`:""}{proj?` · ${proj.name}`:""}</div>
+                  {p.account&&<div style={{fontSize:10,color:C.text3}}>{p.account}{p.date?` · ${fmtDate(p.date)}`:""}</div>}
+                </div>
+                <div style={{fontSize:13,fontWeight:600,color:"#4ADE80",whiteSpace:"nowrap"}}>{fmtMoney(Number(p.amount||0))}</div>
+                <Btn onClick={()=>setEditPurchase(p)} variant="secondary" small>Edit</Btn>
+                <Btn onClick={()=>deletePurchase(p.id)} variant="danger" small>✕</Btn>
+              </div>
+            );
+          })}
+          {purchases.length>0&&(
+            <div style={{display:"flex",justifyContent:"space-between",padding:"10px 16px",borderTop:`1px solid ${C.border}`,fontWeight:600,fontSize:13}}>
+              <span>Total</span>
+              <span style={{color:"#4ADE80"}}>{fmtMoney(purchases.reduce((s,p)=>s+Number(p.amount||0),0))}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Receipts tab ──
+  function renderReceipts(){
+    return(
+      <div>
+        <div style={{textAlign:"center",padding:"40px 20px",border:`1px dashed ${C.border}`,borderRadius:12,background:C.card}}>
+          <div style={{fontSize:32,marginBottom:12}}>📄</div>
+          <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:6}}>PDF Receipt Storage</div>
+          <div style={{fontSize:13,color:C.text2,marginBottom:16,maxWidth:400,margin:"0 auto 16px"}}>Upload and store PDF receipts for purchases and projects. Link them to a room or project for easy retrieval.</div>
+          <div style={{fontSize:12,color:C.text3}}>PDF upload support coming — use the Notes field on purchases for receipt references in the meantime.</div>
+        </div>
+      </div>
+    );
+  }
+
+  return(
+    <div>
+      <div style={{display:"flex",gap:0,borderBottom:`1px solid ${C.border}`,marginBottom:20,overflowX:"auto"}}>
+        {TABS.map(t=>(
+          <button key={t.k} onClick={()=>setTab(t.k)} style={{padding:"9px 16px",background:"none",border:"none",borderBottom:`2px solid ${tab===t.k?C.accent:"transparent"}`,color:tab===t.k?C.accent:C.text2,cursor:"pointer",fontSize:13,fontWeight:tab===t.k?600:400,whiteSpace:"nowrap",marginBottom:-1}}>
+            {t.l}
+          </button>
+        ))}
+        {tab!=="dashboard"&&<div style={{flex:1,display:"flex",justifyContent:"flex-end",alignItems:"center",paddingRight:4}}>
+          <Btn onClick={()=>setAddProject(true)} small>+ New project</Btn>
+        </div>}
+      </div>
+
+      {tab==="dashboard"&&renderDashboard()}
+      {tab==="timeline"&&renderTimeline()}
+      {tab==="projects"&&renderProjects()}
+      {tab==="rooms"&&renderRooms()}
+      {tab==="contacts"&&renderContacts()}
+      {tab==="purchases"&&renderPurchases()}
+      {tab==="receipts"&&renderReceipts()}
+
+      {(addProject||editProject)&&<ProjectModal project={editProject} onSave={saveProject} onClose={()=>{setAddProject(false);setEditProject(null);}}/>}
+      {(addContact||editContact)&&<ContactModal contact={editContact} onSave={saveContact} onClose={()=>{setAddContact(false);setEditContact(null);}}/>}
+      {(addPurchase||editPurchase)&&<PurchaseModal purchase={editPurchase} projects={projects} onSave={savePurchase} onClose={()=>{setAddPurchase(false);setEditPurchase(null);}}/>}
+    </div>
+  );
+}
+
 // ── Login Screen ──
 const APP_ID="family";
 const APP_PW="schedule2026";
@@ -1659,6 +2172,7 @@ function App(){
   const [showSettings,setShowSettings]=useState(false);
   const [settings,setSettings]=useState({sportOptions:DEFAULT_SPORT_OPTIONS});
   const [kids,setKids]=useState(KIDS_DEF);
+  const [houseData,setHouseData]=useState({projects:[],contacts:[],purchases:[],receipts:[]});
 
   useEffect(()=>{
     async function load(){
@@ -1668,6 +2182,7 @@ function App(){
         const acts=await store.get(SK.activities);if(acts)setSports(acts);
         const sett=await store.get(SK.settings);if(sett)setSettings(sett);
         const kds=await store.get(SK.kids);if(kds)setKids(kds);
+        const hd=await store.get(SK.house);if(hd)setHouseData(hd);
       }catch(e){console.error(e);}
       setLoading(false);
     }
@@ -1692,7 +2207,7 @@ function App(){
     else{setPage(dest);setSubPage(null);setSelectedKidKey(null);if(param)setActivitiesTab(param);}
   }
 
-  const NAV=[{k:"home",icon:"⊞",label:"Home"},{k:"activities",icon:"🎯",label:"Activities"},{k:"summer",icon:"☀️",label:"Summer"}];
+  const NAV=[{k:"home",icon:"⊞",label:"Home"},{k:"activities",icon:"🎯",label:"Activities"},{k:"summer",icon:"☀️",label:"Summer"},{k:"house",icon:"🏠",label:"73 Weed Hill"}];
 
   if(!authed)return <LoginScreen onLogin={()=>{sessionStorage.setItem("fs_auth","1");setAuthed(true);}}/>;
 
@@ -1710,6 +2225,7 @@ function App(){
     "kid-profile":{title:kids.find(k=>k.key===selectedKidKey)?.name||"",sub:"Individual profile"},
     activities:{title:"Activities",sub:"Extracurriculars, meets, and results"},
     summer:{title:"Summer Schedule",sub:"Camp and program schedule by year"},
+    house:{title:"73 Weed Hill Ave",sub:"Home improvement tracker"},
   };
   const currentTitle=subPage?pageTitle[subPage]||(pageTitle[page]||{}):pageTitle[page]||{};
 
@@ -1764,6 +2280,7 @@ function App(){
           {page==="home"&&subPage==="kid-profile"&&<KidProfilePage kidKey={selectedKidKey} kids={kids} sports={sports} yearData={yearData} years={years} onBack={()=>navigate("kids-dir")}/>}
           {page==="activities"&&<ActivitiesPage sports={sports} setSports={setSports} conflicts={conflicts} setConflicts={setConflicts} summerData={yearData[activeYear]} settings={settings} initialTab={activitiesTab} kids={kids} onKidClick={k=>navigate("kid-profile",k)}/>}
           {page==="summer"&&<SummerSection yearData={yearData} years={years} activeYear={activeYear} setActiveYear={setActiveYear} onYearDataChange={persistYear} kids={kids}/>}
+          {page==="house"&&<HousePage data={houseData} onChange={async d=>{setHouseData(d);await store.set(SK.house,d);}}/>}
         </div>
       </div>
 
