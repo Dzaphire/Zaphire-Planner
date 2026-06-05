@@ -1520,7 +1520,7 @@ function SummerAddYearModal({years,kids,onSave,onClose}){
   );
 }
 
-function SummerSection({yearData,years,activeYear,setActiveYear,onYearDataChange,kids}){
+function SummerSection({yearData,years,activeYear,setActiveYear,onYearDataChange,kids,getYearData}){
   const [tab,setTab]=useState("dashboard");
   const [editing,setEditing]=useState(null);
   const [showYearMenu,setShowYearMenu]=useState(false);
@@ -1535,8 +1535,10 @@ function SummerSection({yearData,years,activeYear,setActiveYear,onYearDataChange
     const e=ed||editing;
     if(!e)return;
     const s=sched||schedule;
-    const newSchedule={...s,[e.kidKey]:s[e.kidKey].map((entry,i)=>i===e.weekIdx?{a,note,cost}:entry)};
-    onYearDataChange(activeYear,{...cur,schedule:newSchedule});
+    const newSchedule={...s,[e.kidKey]:[...s[e.kidKey]].map((entry,i)=>i===e.weekIdx?{a,note,cost}:entry)};
+    // rebuild full year data fresh — don't spread stale cur
+    const freshCur=(getYearData?getYearData(activeYear):yearData[activeYear])||{schedule:DEF_SCHED,providers:DEF_PROVIDERS,weeks:DEF_WEEKS,notes:""};
+    onYearDataChange(activeYear,{...freshCur,schedule:newSchedule});
     setEditing(null);
   }
   const TABS=[{k:"dashboard",l:"Dashboard"},{k:"kids",l:"By Kid"},{k:"programs",l:"Programs"},{k:"costs",l:"Costs"}];
@@ -2264,7 +2266,7 @@ function App(){
   },[]);
 
   async function persistYear(y,data){
-    const nd={...yearData,[y]:data};setYearData(nd);
+    setYearData(prev=>({...prev,[y]:data}));
     await store.set(SK.year(y),data);
     if(!years.includes(y)){const ny=[...years,y].sort((a,b)=>a-b);setYears(ny);await store.set(SK.years,ny);}
   }
@@ -2354,7 +2356,7 @@ function App(){
           {page==="home"&&subPage==="kids-directory"&&<KidsDirectoryPage kids={kids} sports={sports} onSelectKid={k=>navigate("kid-profile",k)} onBack={()=>navigate("home")}/>}
           {page==="home"&&subPage==="kid-profile"&&<KidProfilePage kidKey={selectedKidKey} kids={kids} sports={sports} yearData={yearData} years={years} onBack={()=>navigate("kids-dir")} onNavigateToSport={(sportId,sessId)=>{setPage("activities");setSubPage(null);setActivitiesTab("activities");setSportNavTarget({sportId,sessId});}}/>}
           {page==="activities"&&<ActivitiesPage sports={sports} setSports={setSports} conflicts={conflicts} setConflicts={setConflicts} summerData={yearData[activeYear]} settings={settings} initialTab={activitiesTab} kids={kids} onKidClick={k=>navigate("kid-profile",k)} sportNavTarget={sportNavTarget} onSportNavConsumed={()=>setSportNavTarget(null)}/>}
-          {page==="summer"&&<SummerSection yearData={yearData} years={years} activeYear={activeYear} setActiveYear={setActiveYear} onYearDataChange={persistYear} kids={kids}/>}
+          {page==="summer"&&<SummerSection yearData={yearData} years={years} activeYear={activeYear} setActiveYear={setActiveYear} onYearDataChange={persistYear} kids={kids} getYearData={y=>yearData[y]}/>}
           {page==="house"&&<HousePage data={houseData} onChange={async d=>{setHouseData(d);await store.set(SK.house,d);}}/>}
         </div>
       </div>
