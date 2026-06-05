@@ -2253,8 +2253,33 @@ function App(){
   useEffect(()=>{
     async function load(){
       try{
+        // always attempt to load each year's data directly, don't depend on sap-years existing
         const yl=await store.get(SK.years);
-        if(yl){setYears(yl);const data={};for(const y of yl){const r=await store.get(SK.year(y));data[y]=r||{schedule:DEF_SCHED,providers:DEF_PROVIDERS,weeks:DEF_WEEKS,notes:""};} setYearData(data);}
+        const yearList=yl||[2026];
+        if(yl)setYears(yl);
+        const data={};
+        for(const y of yearList){
+          const r=await store.get(SK.year(y));
+          if(r){
+            // merge saved data with defaults so missing keys don't cause errors
+            data[y]={
+              schedule:r.schedule||DEF_SCHED,
+              providers:r.providers||DEF_PROVIDERS,
+              weeks:r.weeks||DEF_WEEKS,
+              notes:r.notes||""
+            };
+          } else {
+            data[y]={schedule:DEF_SCHED,providers:DEF_PROVIDERS,weeks:DEF_WEEKS,notes:""};
+          }
+        }
+        setYearData(data);
+        // ensure sap-years is always saved so future loads work
+        if(!yl){await store.set(SK.years,yearList);}
+        // bootstrap: if year data wasn't in Supabase yet, save it now so next reload reads from DB
+        for(const y of yearList){
+          const exists=await store.get(SK.year(y));
+          if(!exists){await store.set(SK.year(y),data[y]);}
+        }
         const acts=await store.get(SK.activities);if(acts)setSports(acts);
         const sett=await store.get(SK.settings);if(sett)setSettings(sett);
         const kds=await store.get(SK.kids);if(kds)setKids(kds);
@@ -2267,8 +2292,12 @@ function App(){
 
   async function persistYear(y,data){
     setYearData(prev=>({...prev,[y]:data}));
-    await store.set(SK.year(y),data);
-    if(!years.includes(y)){const ny=[...years,y].sort((a,b)=>a-b);setYears(ny);await store.set(SK.years,ny);}
+    const [yearResult,_]=await Promise.all([
+      store.set(SK.year(y),data),
+      // always re-save years list to ensure it exists in Supabase
+      store.set(SK.years,years.includes(y)?years:[...years,y].sort((a,b)=>a-b))
+    ]);
+    if(!years.includes(y)){const ny=[...years,y].sort((a,b)=>a-b);setYears(ny);}
   }
   async function handleSettingsSave(newS,restoreData){
     setSettings(newS);await store.set(SK.settings,newS);
