@@ -1533,23 +1533,25 @@ function SummerSection({yearData,years,activeYear,setActiveYear,onYearDataChange
       </div>
       {isHist&&<div style={{background:"#2D1A05",border:"1px solid #78350F",borderRadius:8,padding:"8px 14px",marginBottom:14,fontSize:12,color:C.warning}}>📚 Viewing {activeYear} — historical record (read-only)</div>}
       {tab==="dashboard"&&(
-        <div>
-          <div style={{display:"grid",gridTemplateColumns:"100px repeat(4,1fr)",gap:4,marginBottom:4,width:"100%"}}>
-            <div/>{kids.map(k=><div key={k.key} style={{textAlign:"center",padding:"6px 4px",background:k.bg,borderRadius:8,border:`1px solid ${k.color}33`}}><div style={{fontSize:12,fontWeight:600,color:k.color}}>{k.name}</div><div style={{fontSize:10,color:C.text3}}>Age {ageAsOf(k.dob,`${activeYear}-06-22`)}</div></div>)}
+        <div style={{display:"flex",flexDirection:"column",height:"calc(100vh - 220px)",minHeight:400}}>
+          <div style={{display:"grid",gridTemplateColumns:"100px repeat(4,1fr)",gap:4,marginBottom:4,flexShrink:0}}>
+            <div/>{kids.map(k=><div key={k.key} style={{textAlign:"center",padding:"8px 4px",background:k.bg,borderRadius:8,border:`1px solid ${k.color}33`}}><div style={{fontSize:13,fontWeight:600,color:k.color}}>{k.name}</div><div style={{fontSize:11,color:C.text3}}>Age {ageAsOf(k.dob,`${activeYear}-06-22`)}</div></div>)}
           </div>
-          {weeks.map((wk,wi)=>(
-            <div key={wi} style={{display:"grid",gridTemplateColumns:"100px repeat(4,1fr)",gap:4,marginBottom:4}}>
-              <div style={{background:C.card3,borderRadius:8,padding:"6px 8px",border:`1px solid ${C.border}`}}><div style={{fontWeight:600,fontSize:11,color:C.text}}>{wk.label}</div><div style={{fontSize:10,color:C.text3}}>{wk.dates}</div></div>
-              {kids.map(k=>{const s=(schedule[k.key]&&schedule[k.key][wi])||{a:"Unscheduled",note:"",cost:""};const c=getTC(s.a);return(
-                <div key={k.key} onClick={()=>!isHist&&setEditing({kidKey:k.key,weekIdx:wi,kid:k})} style={{background:c.bg,border:`1px solid ${c.border}`,borderRadius:8,padding:"6px 8px",cursor:isHist?"default":"pointer",minHeight:46}} onMouseEnter={e=>{if(!isHist)e.currentTarget.style.opacity="0.75";}} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
-                  <div style={{fontWeight:600,fontSize:11,color:c.txt}}>{s.a}</div>
-                  {s.note&&<div style={{fontSize:10,color:c.txt,opacity:0.8,marginTop:1,lineHeight:1.3}}>{s.note}</div>}
-                  {s.cost&&<div style={{fontSize:10,fontWeight:500,color:c.txt,marginTop:2}}>{s.cost}</div>}
-                </div>
-              );})}
-            </div>
-          ))}
-          {!isHist&&<div style={{fontSize:11,color:C.text3,marginTop:6,textAlign:"center"}}>Tap any cell to edit</div>}
+          <div style={{display:"flex",flexDirection:"column",flex:1,gap:4}}>
+            {weeks.map((wk,wi)=>(
+              <div key={wi} style={{display:"grid",gridTemplateColumns:"100px repeat(4,1fr)",gap:4,flex:1,minHeight:0}}>
+                <div style={{background:C.card3,borderRadius:8,padding:"6px 8px",border:`1px solid ${C.border}`,display:"flex",flexDirection:"column",justifyContent:"center"}}><div style={{fontWeight:600,fontSize:12,color:C.text}}>{wk.label}</div><div style={{fontSize:10,color:C.text3}}>{wk.dates}</div></div>
+                {kids.map(k=>{const s=(schedule[k.key]&&schedule[k.key][wi])||{a:"Unscheduled",note:"",cost:""};const c=getTC(s.a);return(
+                  <div key={k.key} onClick={()=>!isHist&&setEditing({kidKey:k.key,weekIdx:wi,kid:k})} style={{background:c.bg,border:`1px solid ${c.border}`,borderRadius:8,padding:"8px 10px",cursor:isHist?"default":"pointer",display:"flex",flexDirection:"column",justifyContent:"center"}} onMouseEnter={e=>{if(!isHist)e.currentTarget.style.opacity="0.75";}} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
+                    <div style={{fontWeight:600,fontSize:12,color:c.txt}}>{s.a}</div>
+                    {s.note&&<div style={{fontSize:11,color:c.txt,opacity:0.8,marginTop:2,lineHeight:1.3}}>{s.note}</div>}
+                    {s.cost&&<div style={{fontSize:11,fontWeight:500,color:c.txt,marginTop:2}}>{s.cost}</div>}
+                  </div>
+                );})}
+              </div>
+            ))}
+          </div>
+          {!isHist&&<div style={{fontSize:11,color:C.text3,marginTop:6,textAlign:"center",flexShrink:0}}>Tap any cell to edit</div>}
         </div>
       )}
       {tab==="kids"&&(
