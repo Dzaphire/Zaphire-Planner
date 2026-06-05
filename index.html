@@ -1517,7 +1517,7 @@ function SummerSection({yearData,years,activeYear,setActiveYear,onYearDataChange
   const {schedule,providers,weeks}=cur;
   const isHist=activeYear<new Date().getFullYear();
   function updateCur(patch){onYearDataChange(activeYear,{...cur,...patch});}
-  function saveEntry({a,note,cost}){updateCur({schedule:{...schedule,[editing.kidKey]:schedule[editing.kidKey].map((e,i)=>i===editing.weekIdx?{a,note,cost}:e)}});setEditing(null);}
+  function saveEntry({a,note,cost},ed){const e=ed||editing;if(!e)return;updateCur({schedule:{...schedule,[e.kidKey]:schedule[e.kidKey].map((entry,i)=>i===e.weekIdx?{a,note,cost}:entry)}});setEditing(null);}
   const TABS=[{k:"dashboard",l:"Dashboard"},{k:"kids",l:"By Kid"},{k:"programs",l:"Programs"},{k:"costs",l:"Costs"}];
   return(
     <div>
@@ -1601,7 +1601,7 @@ function SummerSection({yearData,years,activeYear,setActiveYear,onYearDataChange
         </div>
       )}
       {tab==="costs"&&activeYear!==2026&&<div style={{textAlign:"center",padding:"40px 20px",color:C.text3,fontSize:13}}>Add costs via the schedule for {activeYear}.</div>}
-      {editing&&<SummerEditModal editing={editing} schedule={schedule} weeks={weeks} providers={providers} onSave={saveEntry} onClose={()=>setEditing(null)}/>}
+      {editing&&<SummerEditModal editing={editing} schedule={schedule} weeks={weeks} providers={providers} onSave={vals=>saveEntry(vals,editing)} onClose={()=>setEditing(null)}/>}
       {addingYear&&<SummerAddYearModal years={years} kids={kids} onSave={(y,data)=>{onYearDataChange(y,data);setAddingYear(false);}} onClose={()=>setAddingYear(false)}/>}
     </div>
   );
