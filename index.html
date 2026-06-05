@@ -538,7 +538,7 @@ function KidProfilePage({kidKey,kids,sports,yearData,years,onBack,onNavigateToSp
   const allSessions=kidSports.flatMap(sp=>sp.sessions.map(s=>({...s,sportName:sp.name,teamName:sp.teamName})));
   const totalSpend=allSessions.filter(s=>s.enrolled).reduce((sum,s)=>sum+Number(s.cost||0),0);
   const allResults=kidSports.flatMap(sp=>sp.sessions.flatMap(sess=>sess.meets.filter(m=>m.results.some(r=>r.kidKey===kidKey)).map(m=>({...m,sportName:sp.name,sessName:sess.name,results:m.results.filter(r=>r.kidKey===kidKey)}))));
-  const TABS=[{k:"activities",l:"Activities"},{k:"results",l:"Results"},{k:"finances",l:"Finances"},{k:"summer",l:"Summer"},{k:"notes",l:"Notes"}];
+  const TABS=[{k:"activities",l:"Activities"},{k:"memberships",l:"Memberships"},{k:"results",l:"Results"},{k:"finances",l:"Finances"},{k:"summer",l:"Summer"},{k:"notes",l:"Notes"}];
   const today=new Date();
   return(
     <div>
@@ -658,6 +658,54 @@ function KidProfilePage({kidKey,kids,sports,yearData,years,onBack,onNavigateToSp
               </div>
             </div>
           );})}
+        </div>
+      )}
+      {tab==="memberships"&&(
+        <div>
+          {(()=>{
+            const today=new Date();
+            const allMems=kidSports.flatMap(sp=>(sp.memberships||[]).map(m=>({...m,sportId:sp.id,sportName:sp.name,sc:getSC(sp.name)})));
+            const active=allMems.filter(m=>!m.expDate||new Date(m.expDate+"T12:00:00")>=today);
+            const expired=allMems.filter(m=>m.expDate&&new Date(m.expDate+"T12:00:00")<today);
+            function renderRow(m,isExpired){
+              const daysLeft=m.expDate?Math.round((new Date(m.expDate+"T12:00:00")-today)/(1000*60*60*24)):null;
+              const expiringSoon=daysLeft!==null&&daysLeft<=60&&daysLeft>0;
+              return(
+                <div key={m.id} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 0",borderBottom:`1px solid ${C.border}`,opacity:isExpired?0.6:1}}>
+                  <div style={{width:36,height:36,borderRadius:8,background:m.sc.bg,border:`1px solid ${m.sc.border}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                    <span style={{fontSize:10,fontWeight:600,color:m.sc.txt}}>{m.sportName.slice(0,2).toUpperCase()}</span>
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3,flexWrap:"wrap"}}>
+                      <span style={{fontSize:13,fontWeight:600,color:C.text}}>{m.name}</span>
+                      <span style={{fontSize:10,background:m.sc.bg,color:m.sc.txt,border:`1px solid ${m.sc.border}`,padding:"1px 7px",borderRadius:4}}>{m.sportName}</span>
+                      {!isExpired&&<span style={{fontSize:10,background:"#052E16",color:"#4ADE80",padding:"1px 7px",borderRadius:20}}>Current</span>}
+                      {isExpired&&<span style={{fontSize:10,background:"#1F2937",color:"#6B7280",padding:"1px 7px",borderRadius:20}}>Expired</span>}
+                      {expiringSoon&&<span style={{fontSize:10,background:"#2D1A05",color:"#FCD34D",padding:"1px 7px",borderRadius:20}}>Expires in {daysLeft}d</span>}
+                    </div>
+                    <div style={{display:"flex",gap:14,flexWrap:"wrap",fontSize:11,color:C.text3}}>
+                      {m.memberNumber&&<span>#{m.memberNumber}</span>}
+                      {m.memberType&&<span>{m.memberType}</span>}
+                      {m.expDate&&<span>Exp {fmtDate(m.expDate)}</span>}
+                      {m.cost&&<span>· {fmtMoney(Number(m.cost))}</span>}
+                    </div>
+                    {m.orgUrl&&<a href={m.orgUrl} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:C.accent,marginTop:2,display:"block"}}>Portal ↗</a>}
+                    {m.notes&&<div style={{fontSize:11,color:C.text3,marginTop:3,fontStyle:"italic"}}>{m.notes}</div>}
+                  </div>
+                </div>
+              );
+            }
+            if(allMems.length===0)return <div style={{textAlign:"center",padding:"40px",color:C.text3,fontSize:13,border:`1px dashed ${C.border}`,borderRadius:12}}>No memberships added yet. Go to Activities → Memberships to add them.</div>;
+            return(
+              <div style={{border:`1px solid ${C.border}`,borderRadius:12,padding:"0 16px",background:C.card}}>
+                {active.length>0&&active.map(m=>renderRow(m,false))}
+                {expired.length>0&&(<>
+                  <div style={{fontSize:11,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em",color:C.text3,padding:"10px 0 4px"}}>Expired</div>
+                  {expired.map(m=>renderRow(m,true))}
+                </>)}
+              </div>
+            );
+          })()}
         </div>
       )}
       {tab==="notes"&&(
@@ -855,6 +903,16 @@ function Dashboard({sports,summerData,conflicts,kids,onNavigate}){
 
 // ── Activities Page ──
 function ActivitiesPage({sports,setSports,conflicts,setConflicts,summerData,settings,initialTab,kids,onKidClick,sportNavTarget,onSportNavConsumed}){
+  // membership state
+  const [editMembership,setEditMembership]=useState(null);
+  const [addMembershipSportId,setAddMembershipSportId]=useState(null);
+  function saveMembership(sportId,mem){
+    setSports(sports.map(sp=>sp.id===sportId?{...sp,memberships:[...(sp.memberships||[]).filter(m=>m.id!==mem.id),mem]}:sp));
+    setEditMembership(null);setAddMembershipSportId(null);
+  }
+  function deleteMembership(sportId,memId){
+    setSports(sports.map(sp=>sp.id===sportId?{...sp,memberships:(sp.memberships||[]).filter(m=>m.id!==memId)}:sp));
+  }
   const [sub,setSub]=useState(initialTab||"calendar");
   const [showSummer,setShowSummer]=useState(true);
   const [showEC,setShowEC]=useState(true);
@@ -902,7 +960,7 @@ function ActivitiesPage({sports,setSports,conflicts,setConflicts,summerData,sett
   function resolveConflict(c,meetId){setConflicts(conflicts.map(x=>x.kidKey===c.kidKey&&x.date===c.date?{...x,chosen:meetId}:x));}
 
   const filtered=sports.filter(s=>(filterKid==="all"||s.kidKey===filterKid)&&(filterSport==="all"||s.name===filterSport));
-  const SUBTABS=[{k:"calendar",l:"📅 Calendar"},{k:"activities",l:"🎯 Activities"},{k:"results",l:"🏆 Results"},{k:"finances",l:"💰 Finances"}];
+  const SUBTABS=[{k:"calendar",l:"📅 Calendar"},{k:"activities",l:"🎯 Activities"},{k:"results",l:"🏆 Results"},{k:"finances",l:"💰 Finances"},{k:"memberships",l:"🪪 Memberships"}];
   const today=new Date();
 
   // ── Finances sub-component ──
@@ -1042,7 +1100,7 @@ function ActivitiesPage({sports,setSports,conflicts,setConflicts,summerData,sett
     const activeSessionLabel=activeSess?(activeSess.enrolled&&new Date(activeSess.end+"T12:00:00")>=today2?"Active":activeSess.name):sp.sessions.length?"—":"No sessions";
     const activeSessionName=activeSess?activeSess.name:activeSessionLabel;
 
-    const TABS=[{k:"overview",l:"Overview"},{k:"practices",l:"Practices"},{k:"meets",l:"Meets & games"},{k:"results",l:"Results"},{k:"sessions",l:"All sessions"}];
+    const TABS=[{k:"overview",l:"Overview"},{k:"practices",l:"Practices"},{k:"meets",l:"Meets & games"},{k:"results",l:"Results"},{k:"memberships",l:"Memberships"},{k:"sessions",l:"All sessions"}];
 
     return(
       <div>
@@ -1286,6 +1344,49 @@ function ActivitiesPage({sports,setSports,conflicts,setConflicts,summerData,sett
           </div>
         )}
 
+        {/* ── Memberships tab ── */}
+        {detailTab==="memberships"&&(
+          <div>
+            {(sp.memberships||[]).length===0&&<div style={{textAlign:"center",padding:"30px",color:C.text3,fontSize:13,border:`1px dashed ${C.border}`,borderRadius:12,marginBottom:12}}>No memberships added for this activity yet.</div>}
+            {(()=>{
+              const today2b=new Date();
+              return(sp.memberships||[]).map(m=>{
+                const daysLeft=m.expDate?Math.round((new Date(m.expDate+"T12:00:00")-today2b)/(1000*60*60*24)):null;
+                const isExpired=daysLeft!==null&&daysLeft<0;
+                const expiringSoon=daysLeft!==null&&daysLeft<=60&&daysLeft>=0;
+                return(
+                  <div key={m.id} style={{border:`1px solid ${isExpired?C.border:sc.border}`,borderLeft:`3px solid ${isExpired?"#6B7280":sc.txt}`,borderRadius:10,padding:"13px 16px",marginBottom:8,background:C.card,opacity:isExpired?0.65:1}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+                      <div>
+                        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3,flexWrap:"wrap"}}>
+                          <span style={{fontSize:14,fontWeight:600,color:isExpired?C.text2:sc.txt}}>{m.name}</span>
+                          {!isExpired&&<span style={{fontSize:10,background:"#052E16",color:"#4ADE80",padding:"2px 8px",borderRadius:20}}>Current</span>}
+                          {isExpired&&<span style={{fontSize:10,background:"#1F2937",color:"#6B7280",padding:"2px 8px",borderRadius:20}}>Expired</span>}
+                          {expiringSoon&&<span style={{fontSize:10,background:"#2D1A05",color:"#FCD34D",padding:"2px 8px",borderRadius:20}}>Expires in {daysLeft} days</span>}
+                        </div>
+                        {m.memberType&&<div style={{fontSize:12,color:C.text2,marginBottom:2}}>{m.memberType}</div>}
+                        <div style={{display:"flex",gap:14,flexWrap:"wrap",fontSize:11,color:C.text3}}>
+                          {m.memberNumber&&<span>Member #: {m.memberNumber}</span>}
+                          {m.validFrom&&<span>Valid {fmtDate(m.validFrom)}</span>}
+                          {m.expDate&&<span>Expires {fmtDate(m.expDate)}</span>}
+                          {m.cost&&<span>· {fmtMoney(Number(m.cost))}</span>}
+                        </div>
+                        {m.orgUrl&&<a href={m.orgUrl} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:C.accent,marginTop:3,display:"block"}}>Portal / renewal ↗</a>}
+                        {m.notes&&<div style={{fontSize:11,color:C.text3,marginTop:4,fontStyle:"italic"}}>{m.notes}</div>}
+                      </div>
+                      <div style={{display:"flex",gap:5,flexShrink:0}}>
+                        <Btn onClick={()=>setEditMembership({...m,sportId:sp.id})} variant="secondary" small>Edit</Btn>
+                        <Btn onClick={()=>deleteMembership(sp.id,m.id)} variant="danger" small>✕</Btn>
+                      </div>
+                    </div>
+                  </div>
+                );
+              });
+            })()}
+            <button onClick={()=>setAddMembershipSportId(sp.id)} style={{width:"100%",padding:"9px",borderRadius:8,border:`1px dashed ${C.border}`,background:"transparent",cursor:"pointer",fontSize:12,color:C.text3,marginTop:4}}>+ Add membership</button>
+          </div>
+        )}
+
         {/* ── All sessions tab ── */}
         {detailTab==="sessions"&&(
           <div>
@@ -1320,11 +1421,95 @@ function ActivitiesPage({sports,setSports,conflicts,setConflicts,summerData,sett
           </div>
         )}
 
+        {/* ── Memberships page ── */}
+        {sub==="memberships"&&!selectedSportId&&(
+          <div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+              <div style={{fontSize:13,color:C.text2}}>All memberships across all activities</div>
+              <Btn onClick={()=>setAddMembershipSportId("__select__")} small>+ Add membership</Btn>
+            </div>
+            {sports.length===0&&<div style={{textAlign:"center",padding:"40px",color:C.text3,fontSize:13,border:`1px dashed ${C.border}`,borderRadius:12}}>No activities added yet.</div>}
+            {(()=>{
+              const allMems=sports.flatMap(sp=>(sp.memberships||[]).map(m=>({...m,sportId:sp.id,sportName:sp.name,kidKey:sp.kidKey,sc:getSC(sp.name)})));
+              const today=new Date();
+              const active=allMems.filter(m=>!m.expDate||new Date(m.expDate+"T12:00:00")>=today);
+              const expired=allMems.filter(m=>m.expDate&&new Date(m.expDate+"T12:00:00")<today);
+              function renderMemRow(m,isExpired){
+                const kid=kids.find(k=>k.key===m.kidKey);
+                const daysLeft=m.expDate?Math.round((new Date(m.expDate+"T12:00:00")-today)/(1000*60*60*24)):null;
+                const expiringSoon=daysLeft!==null&&daysLeft<=60&&daysLeft>0;
+                return(
+                  <div key={m.id} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 16px",borderBottom:`1px solid ${C.border}`,opacity:isExpired?0.6:1}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3,flexWrap:"wrap"}}>
+                        <span style={{fontSize:13,fontWeight:600,color:C.text}}>{m.name}</span>
+                        {kid&&<KidPill kid={kid} small/>}
+                        <span style={{fontSize:10,background:m.sc.bg,color:m.sc.txt,border:`1px solid ${m.sc.border}`,padding:"1px 7px",borderRadius:4}}>{m.sportName}</span>
+                        {isExpired&&<span style={{fontSize:10,background:"#1F2937",color:"#6B7280",padding:"1px 7px",borderRadius:20}}>Expired</span>}
+                        {!isExpired&&m.expDate&&<span style={{fontSize:10,background:"#052E16",color:"#4ADE80",padding:"1px 7px",borderRadius:20}}>Current</span>}
+                        {expiringSoon&&<span style={{fontSize:10,background:"#2D1A05",color:"#FCD34D",padding:"1px 7px",borderRadius:20}}>Expires in {daysLeft}d</span>}
+                      </div>
+                      <div style={{display:"flex",gap:16,flexWrap:"wrap",fontSize:11,color:C.text3}}>
+                        {m.memberNumber&&<span>#{m.memberNumber}</span>}
+                        {m.memberType&&<span>{m.memberType}</span>}
+                        {m.validFrom&&<span>Valid {fmtDate(m.validFrom)}</span>}
+                        {m.expDate&&<span>– {fmtDate(m.expDate)}</span>}
+                        {m.cost&&<span>· {fmtMoney(Number(m.cost))}</span>}
+                      </div>
+                      {m.orgUrl&&<a href={m.orgUrl} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:C.accent,marginTop:2,display:"block"}}>Portal ↗</a>}
+                      {m.notes&&<div style={{fontSize:11,color:C.text3,marginTop:3,fontStyle:"italic"}}>{m.notes}</div>}
+                    </div>
+                    <div style={{display:"flex",gap:5,flexShrink:0}}>
+                      <Btn onClick={()=>setEditMembership({...m})} variant="secondary" small>Edit</Btn>
+                      <Btn onClick={()=>deleteMembership(m.sportId,m.id)} variant="danger" small>✕</Btn>
+                    </div>
+                  </div>
+                );
+              }
+              return(
+                <div>
+                  {active.length===0&&expired.length===0&&<div style={{textAlign:"center",padding:"40px",color:C.text3,fontSize:13,border:`1px dashed ${C.border}`,borderRadius:12}}>No memberships added yet. Add a membership to track renewals and member numbers.</div>}
+                  {active.length>0&&(
+                    <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden",background:C.card,marginBottom:12}}>
+                      <div style={{padding:"10px 16px",borderBottom:`1px solid ${C.border}`,background:C.card2,fontSize:11,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em",color:C.text3}}>Active · {active.length}</div>
+                      {active.map(m=>renderMemRow(m,false))}
+                    </div>
+                  )}
+                  {expired.length>0&&(
+                    <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden",background:C.card}}>
+                      <div style={{padding:"10px 16px",borderBottom:`1px solid ${C.border}`,background:C.card2,fontSize:11,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em",color:C.text3}}>Expired · {expired.length}</div>
+                      {expired.map(m=>renderMemRow(m,true))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+            {/* add membership — sport selector if no sportId chosen yet */}
+            {addMembershipSportId==="__select__"&&(
+              <Modal title="Add membership — select activity" onClose={()=>setAddMembershipSportId(null)}>
+                <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                  {sports.map(sp=>{
+                    const kid=kids.find(k=>k.key===sp.kidKey);
+                    return(
+                      <div key={sp.id} onClick={()=>setAddMembershipSportId(sp.id)} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",border:`1px solid ${C.border}`,borderRadius:8,cursor:"pointer",background:C.card2}}
+                        onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent}
+                        onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
+                        <span style={{fontSize:13,fontWeight:500,flex:1,color:C.text}}>{sp.name}</span>
+                        {kid&&<KidPill kid={kid} small/>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </Modal>
+            )}
+          </div>
+        )}
         {(editSport||addSport)&&<SportModal sport={editSport} sportOptions={sportOptions} onSave={saveSport} onClose={()=>{setAddSport(false);setEditSport(null);}}/>}
         {addSession&&<SessionModal onSave={sess=>saveSession(addSession.sportId,sess)} onClose={()=>setAddSession(null)}/>}
         {editSession&&<SessionModal session={editSession.session} onSave={sess=>saveSession(editSession.sportId,sess)} onClose={()=>setEditSession(null)}/>}
         {addMeet&&<MeetModal kidKey={addMeet.kidKey} onSave={meet=>saveMeet(addMeet.sportId,addMeet.sessionId,meet)} onClose={()=>setAddMeet(null)} kids={kids}/>}
         {editMeet&&<MeetModal meet={editMeet.meet} kidKey={sports.find(s=>s.id===editMeet.sportId)?.kidKey} onSave={meet=>saveMeet(editMeet.sportId,editMeet.sessionId,meet)} onClose={()=>setEditMeet(null)} kids={kids}/>}
+        {(editMembership||( addMembershipSportId&&addMembershipSportId!=="__select__"))&&<MembershipModal membership={editMembership} onSave={m=>saveMembership(editMembership?editMembership.sportId:addMembershipSportId,m)} onClose={()=>{setEditMembership(null);setAddMembershipSportId(null);}}/>}
       </div>
     );
   }
@@ -1668,6 +1853,31 @@ function SettingsModal({settings,onSave,allData,onClose,kids,onSaveKid}){
   );
 }
 
+
+
+function MembershipModal({membership,sport,onSave,onClose}){
+  const blank={id:Date.now()+"",name:"",orgUrl:"",memberNumber:"",memberType:"",validFrom:"",expDate:"",cost:"",notes:""};
+  const [m,setM]=useState(membership||blank);
+  return(
+    <Modal title={membership?"Edit membership":"Add membership"} onClose={onClose} wide>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <F label="Membership / org name"><Inp value={m.name} onChange={v=>setM({...m,name:v})} placeholder="e.g. USATF Youth Membership"/></F>
+        <F label="Member number"><Inp value={m.memberNumber} onChange={v=>setM({...m,memberNumber:v})} placeholder="e.g. 2050368639"/></F>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <F label="Membership type"><Inp value={m.memberType} onChange={v=>setM({...m,memberType:v})} placeholder="e.g. USATF Youth – Individual"/></F>
+        <F label="Cost ($)"><Inp type="number" value={m.cost} onChange={v=>setM({...m,cost:v})}/></F>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <F label="Valid from"><Inp type="date" value={m.validFrom} onChange={v=>setM({...m,validFrom:v})}/></F>
+        <F label="Expiry date"><Inp type="date" value={m.expDate} onChange={v=>setM({...m,expDate:v})}/></F>
+      </div>
+      <F label="Website / portal URL"><Inp value={m.orgUrl} onChange={v=>setM({...m,orgUrl:v})} placeholder="https://www.usatf.org"/></F>
+      <F label="Notes"><textarea value={m.notes} onChange={e=>setM({...m,notes:e.target.value})} rows={2} placeholder="Any additional notes..." style={{width:"100%",background:C.card2,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",fontSize:13,color:C.text,resize:"vertical",boxSizing:"border-box",fontFamily:"inherit"}}/></F>
+      <div style={{display:"flex",gap:10,marginTop:10}}><Btn onClick={onClose} variant="secondary">Cancel</Btn><Btn onClick={()=>onSave(m)}>Save membership</Btn></div>
+    </Modal>
+  );
+}
 
 // ── House Page ──
 const HOUSE_FLOORS = [
