@@ -35,9 +35,23 @@ const SURL="https://ttdioqltjmgalnbkapzi.supabase.co";
 const SKEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR0ZGlvcWx0am1nYWxuYmthcHppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk4MzU1NjksImV4cCI6MjA5NTQxMTU2OX0.KW5DDiC2FUFMFG7BPH87aFp-alarJijx-aGiHwfUW_I";
 const sb=supabase.createClient(SURL,SKEY);
 const SK={years:"sap-years",year:y=>`sap-summer-${y}`,activities:"sap-activities",settings:"sap-settings",kids:"sap-kids",house:"sap-house"};
+// toast helper
+let _toastTimer=null;
+function showToast(msg,type="success"){
+  let el=document.getElementById("app-toast");
+  if(!el){el=document.createElement("div");el.id="app-toast";el.style.cssText="position:fixed;bottom:24px;left:50%;transform:translateX(-50%);padding:10px 20px;borderRadius:10px;fontSize:13px;fontWeight:500;zIndex:9999;transition:opacity 0.3s;pointerEvents:none;";document.body.appendChild(el);}
+  el.style.background=type==="error"?"#7F1D1D":"#052E16";
+  el.style.color=type==="error"?"#FCA5A5":"#4ADE80";
+  el.style.border=`1px solid ${type==="error"?"#EF4444":"#16A34A"}`;
+  el.style.opacity="1";
+  el.textContent=msg;
+  clearTimeout(_toastTimer);
+  _toastTimer=setTimeout(()=>{el.style.opacity="0";},3000);
+}
+
 const store={
   get:async k=>{try{const{data,error}=await sb.from("app_data").select("value").eq("key",k).single();if(error||!data)return null;return data.value;}catch{return null;}},
-  set:async(k,v)=>{try{const{error}=await sb.from("app_data").upsert({key:k,value:v,updated_at:new Date().toISOString()},{onConflict:"key"});if(error){console.error("store.set error",k,error);}}catch(e){console.error("store.set exception",k,e);}},
+  set:async(k,v)=>{try{const{error}=await sb.from("app_data").upsert({key:k,value:v,updated_at:new Date().toISOString()},{onConflict:"key"});if(error){console.error("store.set error",k,error);showToast("Save failed: "+error.message,"error");}else{showToast("Saved ✓");}}catch(e){console.error("store.set exception",k,e);showToast("Save error: "+e.message,"error");}},
 };
 
 const MAPBOX_TOKEN="pk.eyJ1IjoiZHphcGhpcmUiLCJhIjoiY21wdWw5YmY0MXZnNDJwb3NnbTBodjRuaCJ9.MvimgVuQoK1SNZzRHztfMQ";
