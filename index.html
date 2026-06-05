@@ -37,7 +37,7 @@ const sb=supabase.createClient(SURL,SKEY);
 const SK={years:"sap-years",year:y=>`sap-summer-${y}`,activities:"sap-activities",settings:"sap-settings",kids:"sap-kids",house:"sap-house"};
 const store={
   get:async k=>{try{const{data,error}=await sb.from("app_data").select("value").eq("key",k).single();if(error||!data)return null;return data.value;}catch{return null;}},
-  set:async(k,v)=>{try{await sb.from("app_data").upsert({key:k,value:v,updated_at:new Date().toISOString()});}catch(e){console.error(e);}},
+  set:async(k,v)=>{try{const{error}=await sb.from("app_data").upsert({key:k,value:v,updated_at:new Date().toISOString()},{onConflict:"key"});if(error){console.error("store.set error",k,error);}}catch(e){console.error("store.set exception",k,e);}},
 };
 
 const MAPBOX_TOKEN="pk.eyJ1IjoiZHphcGhpcmUiLCJhIjoiY21wdWw5YmY0MXZnNDJwb3NnbTBodjRuaCJ9.MvimgVuQoK1SNZzRHztfMQ";
@@ -1517,7 +1517,14 @@ function SummerSection({yearData,years,activeYear,setActiveYear,onYearDataChange
   const {schedule,providers,weeks}=cur;
   const isHist=activeYear<new Date().getFullYear();
   function updateCur(patch){onYearDataChange(activeYear,{...cur,...patch});}
-  function saveEntry({a,note,cost},ed){const e=ed||editing;if(!e)return;updateCur({schedule:{...schedule,[e.kidKey]:schedule[e.kidKey].map((entry,i)=>i===e.weekIdx?{a,note,cost}:entry)}});setEditing(null);}
+  function saveEntry({a,note,cost},ed,sched){
+    const e=ed||editing;
+    if(!e)return;
+    const s=sched||schedule;
+    const newSchedule={...s,[e.kidKey]:s[e.kidKey].map((entry,i)=>i===e.weekIdx?{a,note,cost}:entry)};
+    onYearDataChange(activeYear,{...cur,schedule:newSchedule});
+    setEditing(null);
+  }
   const TABS=[{k:"dashboard",l:"Dashboard"},{k:"kids",l:"By Kid"},{k:"programs",l:"Programs"},{k:"costs",l:"Costs"}];
   return(
     <div>
@@ -1601,7 +1608,7 @@ function SummerSection({yearData,years,activeYear,setActiveYear,onYearDataChange
         </div>
       )}
       {tab==="costs"&&activeYear!==2026&&<div style={{textAlign:"center",padding:"40px 20px",color:C.text3,fontSize:13}}>Add costs via the schedule for {activeYear}.</div>}
-      {editing&&<SummerEditModal editing={editing} schedule={schedule} weeks={weeks} providers={providers} onSave={vals=>saveEntry(vals,editing)} onClose={()=>setEditing(null)}/>}
+      {editing&&<SummerEditModal editing={editing} schedule={schedule} weeks={weeks} providers={providers} onSave={vals=>saveEntry(vals,editing,schedule)} onClose={()=>setEditing(null)}/>}
       {addingYear&&<SummerAddYearModal years={years} kids={kids} onSave={(y,data)=>{onYearDataChange(y,data);setAddingYear(false);}} onClose={()=>setAddingYear(false)}/>}
     </div>
   );
