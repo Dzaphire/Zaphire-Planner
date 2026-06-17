@@ -425,7 +425,22 @@ function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClic
     });
   }
 
-  const evOn=d=>events.filter(e=>e.date===d);
+  // parse "4:00 PM" → fractional hour (16.0)
+  function parseEvHour(str){
+    if(!str)return null;
+    const m=String(str).match(/([0-9]+):([0-9]+)\s*(AM|PM)/i);
+    if(!m)return null;
+    let h=parseInt(m[1]),mn=parseInt(m[2]),ap=m[3].toUpperCase();
+    if(ap==="PM"&&h!==12)h+=12;
+    if(ap==="AM"&&h===12)h=0;
+    return h+mn/60;
+  }
+  function evSortTime(e){
+    const raw=e.type==="practice"?String(e.sub||"").split("–")[0].split("·")[0].trim():String(e.sub||"").split("·")[0].trim();
+    const h=parseEvHour(raw);
+    return h!==null?h:99;
+  }
+  const evOn=d=>[...events.filter(ev=>ev.date===d)].sort((a,b)=>evSortTime(a)-evSortTime(b));
   const icon=t=>t==="meet"?"★":t==="practice"?"▸":"☀";
 
   function VToggle(){return <div style={{display:"flex",gap:4}}>{["day","week","month"].map(v=><button key={v} onClick={()=>setViewMode(v)} style={{padding:"5px 12px",borderRadius:7,border:`1px solid ${viewMode===v?C.accent:C.border}`,background:viewMode===v?C.accent:C.card2,color:viewMode===v?"#fff":C.text2,cursor:"pointer",fontSize:12,textTransform:"capitalize"}}>{v}</button>)}</div>;}
@@ -498,30 +513,104 @@ function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClic
       </div>
     );
   }
-  const ds=`${curDate.getFullYear()}-${String(curDate.getMonth()+1).padStart(2,"0")}-${String(curDate.getDate()).padStart(2,"0")}`,evs=evOn(ds),isToday=curDate.toDateString()===today.toDateString();
+  // ── Day view — Option C: time ruler + right detail panel ──
+  const [selEv,setSelEv]=useState(null);
+  const ds=`${curDate.getFullYear()}-${String(curDate.getMonth()+1).padStart(2,"0")}-${String(curDate.getDate()).padStart(2,"0")}`;
+  const isToday=curDate.toDateString()===today.toDateString();
+  const sortedEvs=evOn(ds);
+  const PX_PER_HOUR=72;
+
+  // determine ruler range from actual event times
+  const evHours=sortedEvs.map(e=>evSortTime(e)).filter(h=>h<99);
+  const rulerStart=evHours.length?Math.max(0,Math.floor(Math.min(...evHours))-1):8;
+  const rulerEnd=evHours.length?Math.min(24,Math.ceil(Math.max(...evHours))+2):20;
+  const rulerHours=Array.from({length:rulerEnd-rulerStart},(_,i)=>rulerStart+i);
+
+  function fmtHour(h){const ap=h>=12?"PM":"AM";const h12=h===0?12:h>12?h-12:h;return `${h12}:00 ${ap}`;}
+
   return(
-    <div>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+    <div style={{display:"flex",flexDirection:"column",height:"calc(100vh - 180px)",minHeight:500}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexShrink:0}}>
         <div style={{display:"flex",gap:6,alignItems:"center"}}>
-          <button onClick={()=>{const d=new Date(curDate);d.setDate(d.getDate()-1);setCurDate(d);}} style={{padding:"5px 11px",borderRadius:7,border:`1px solid ${C.border}`,background:C.card2,cursor:"pointer",fontSize:14,color:C.text}}>‹</button>
+          <button onClick={()=>{const d=new Date(curDate);d.setDate(d.getDate()-1);setCurDate(d);setSelEv(null);}} style={{padding:"5px 11px",borderRadius:7,border:`1px solid ${C.border}`,background:C.card2,cursor:"pointer",fontSize:14,color:C.text}}>‹</button>
           <span style={{fontWeight:600,fontSize:15,color:isToday?C.accent:C.text}}>{curDate.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"})}{isToday?" — Today":""}</span>
-          <button onClick={()=>{const d=new Date(curDate);d.setDate(d.getDate()+1);setCurDate(d);}} style={{padding:"5px 11px",borderRadius:7,border:`1px solid ${C.border}`,background:C.card2,cursor:"pointer",fontSize:14,color:C.text}}>›</button>
+          <button onClick={()=>{const d=new Date(curDate);d.setDate(d.getDate()+1);setCurDate(d);setSelEv(null);}} style={{padding:"5px 11px",borderRadius:7,border:`1px solid ${C.border}`,background:C.card2,cursor:"pointer",fontSize:14,color:C.text}}>›</button>
         </div>
         <VToggle/>
       </div>
-      {evs.length===0&&<div style={{textAlign:"center",padding:"40px 20px",color:C.text3,fontSize:13}}>Nothing scheduled this day.</div>}
-      {evs.map((e,i)=>{
-        const kid=kids.find(k=>k.key===e.kidKey);
-        return(
-          <div key={i} onClick={()=>onEventClick(e)} style={{background:e.bg,border:`1px solid ${e.border}`,borderLeft:`4px solid ${e.color}`,borderRadius:10,padding:"14px 16px",marginBottom:10,cursor:"pointer"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-              <div><div style={{fontWeight:600,fontSize:14,color:e.color,marginBottom:3}}>{icon(e.type)} {e.label}</div>{e.sub&&<div style={{fontSize:12,color:C.text2}}>{e.sub}</div>}</div>
-              {kid&&<KidPill kid={kid}/>}
+      <div style={{display:"flex",flex:1,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden",minHeight:0}}>
+        {/* time ruler */}
+        <div style={{flex:1,overflowY:"auto",minWidth:0}}>
+          {sortedEvs.length===0?(
+            <div style={{textAlign:"center",padding:"60px 20px",color:C.text3,fontSize:13}}>Nothing scheduled this day.</div>
+          ):(
+            <div style={{position:"relative",height:rulerHours.length*PX_PER_HOUR+32,paddingTop:16}}>
+              {rulerHours.map((h,i)=>(
+                <div key={h} style={{position:"absolute",top:16+i*PX_PER_HOUR,left:0,right:0,display:"flex",alignItems:"flex-start",pointerEvents:"none"}}>
+                  <div style={{width:56,flexShrink:0,textAlign:"right",paddingRight:10,fontSize:10,color:C.text3,marginTop:-7}}>{fmtHour(h)}</div>
+                  <div style={{flex:1,height:"0.5px",background:C.border}}></div>
+                </div>
+              ))}
+              {sortedEvs.map((e,i)=>{
+                const hr=evSortTime(e);
+                const topPx=hr<99?16+(hr-rulerStart)*PX_PER_HOUR:16+i*60;
+                // parse duration from sub "5:30 PM – 6:30 PM · Location"
+                let durH=1;
+                if(e.sub){
+                  const parts=String(e.sub).split("–");
+                  if(parts.length>=2){
+                    const t1=parseEvHour(parts[0].trim());
+                    const t2=parseEvHour(parts[1].split("·")[0].trim());
+                    if(t1!==null&&t2!==null&&t2>t1)durH=t2-t1;
+                  }
+                }
+                const blockH=Math.max(44,durH*PX_PER_HOUR-4);
+                const isSelected=selEv&&selEv._idx===i;
+                const kid=kids.find(k=>k.key===e.kidKey);
+                return(
+                  <div key={i} onClick={()=>setSelEv(isSelected?null:{...e,_idx:i})}
+                    style={{position:"absolute",top:topPx,left:60,right:8,height:blockH,background:isSelected?e.color:e.bg,border:`1.5px solid ${isSelected?"transparent":e.border}`,borderLeft:`4px solid ${e.color}`,borderRadius:"0 8px 8px 0",padding:"6px 10px",cursor:"pointer",overflow:"hidden",zIndex:isSelected?2:1}}>
+                    <div style={{fontSize:12,fontWeight:500,color:isSelected?"#fff":e.color,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{icon(e.type)} {e.label}</div>
+                    {hr<99&&<div style={{fontSize:10,color:isSelected?"rgba(255,255,255,0.8)":C.text2,marginTop:1}}>{String(e.sub||"").split("·")[0].trim()}</div>}
+                    {kid&&blockH>54&&<div style={{marginTop:3}}><KidPill kid={kid} small/></div>}
+                  </div>
+                );
+              })}
             </div>
-            <div style={{fontSize:11,color:C.text3,marginTop:8}}>Tap to edit →</div>
-          </div>
-        );
-      })}
+          )}
+        </div>
+        {/* right detail panel */}
+        {selEv&&(()=>{
+          const kid=kids.find(k=>k.key===selEv.kidKey);
+          const sport=sports.find(s=>s.id===selEv.sportId);
+          const sess=sport?.sessions.find(s=>s.id===selEv.sessionId);
+          const meet=sess?.meets.find(m=>m.id===selEv.meetId);
+          return(
+            <div style={{width:240,flexShrink:0,borderLeft:`1px solid ${C.border}`,background:C.card2,display:"flex",flexDirection:"column",overflowY:"auto"}}>
+              <div style={{height:3,background:selEv.color,flexShrink:0}}/>
+              <div style={{padding:"12px 14px",flex:1}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+                  <div style={{fontSize:13,fontWeight:600,color:selEv.color,lineHeight:1.3,flex:1,marginRight:8}}>{selEv.label}</div>
+                  <button onClick={()=>setSelEv(null)} style={{background:"none",border:`0.5px solid ${C.border}`,borderRadius:5,cursor:"pointer",fontSize:11,color:C.text3,padding:"2px 7px",flexShrink:0}}>✕</button>
+                </div>
+                <div style={{fontSize:10,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em",color:C.text3,marginBottom:8}}>
+                  {selEv.type==="practice"?"Practice":selEv.type==="meet"?"Meet / game":"Summer"}
+                </div>
+                {selEv.sub&&<div style={{fontSize:12,color:C.text2,marginBottom:8,lineHeight:1.5}}>{selEv.sub}</div>}
+                {kid&&<div style={{marginBottom:8}}><KidPill kid={kid}/></div>}
+                {sport&&<div style={{fontSize:12,color:C.text2,marginBottom:3}}>{sport.teamName||sport.location||""}</div>}
+                {sess&&<div style={{fontSize:11,color:C.text3,marginBottom:3}}>{sess.name}</div>}
+                {meet?.location&&<div style={{fontSize:11,color:C.text3,marginBottom:3}}>{meet.location}</div>}
+                {selEv.type!=="summer"&&(
+                  <button onClick={()=>{const ev={...selEv};setSelEv(null);onEventClick(ev);}} style={{width:"100%",marginTop:12,padding:"7px",borderRadius:7,border:`1px solid ${selEv.color}`,background:"transparent",cursor:"pointer",fontSize:12,color:selEv.color}}>
+                    {selEv.type==="meet"?"Edit meet →":"Open activity →"}
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+      </div>
     </div>
   );
 }
