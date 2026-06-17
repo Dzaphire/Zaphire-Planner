@@ -385,6 +385,7 @@ function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClic
   const today=new Date();
   const [viewMode,setViewMode]=useState("month");
   const [curDate,setCurDate]=useState(new Date(2026,5,1));
+  const [selEv,setSelEv]=useState(null);
 
   const events=[];
   if(showEC){
@@ -443,7 +444,7 @@ function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClic
   const evOn=d=>[...events.filter(ev=>ev.date===d)].sort((a,b)=>evSortTime(a)-evSortTime(b));
   const icon=t=>t==="meet"?"★":t==="practice"?"▸":"☀";
 
-  function VToggle(){return <div style={{display:"flex",gap:4}}>{["day","week","month"].map(v=><button key={v} onClick={()=>setViewMode(v)} style={{padding:"5px 12px",borderRadius:7,border:`1px solid ${viewMode===v?C.accent:C.border}`,background:viewMode===v?C.accent:C.card2,color:viewMode===v?"#fff":C.text2,cursor:"pointer",fontSize:12,textTransform:"capitalize"}}>{v}</button>)}</div>;}
+  function VToggle(){return <div style={{display:"flex",gap:4}}>{["day","week","month"].map(v=><button key={v} onClick={()=>{setViewMode(v);setSelEv(null);}} style={{padding:"5px 12px",borderRadius:7,border:`1px solid ${viewMode===v?C.accent:C.border}`,background:viewMode===v?C.accent:C.card2,color:viewMode===v?"#fff":C.text2,cursor:"pointer",fontSize:12,textTransform:"capitalize"}}>{v}</button>)}</div>;}
 
   if(viewMode==="month"){
     const yr=curDate.getFullYear(),mo=curDate.getMonth();
@@ -514,7 +515,6 @@ function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClic
     );
   }
   // ── Day view — Option C: time ruler + right detail panel ──
-  const [selEv,setSelEv]=useState(null);
   const ds=`${curDate.getFullYear()}-${String(curDate.getMonth()+1).padStart(2,"0")}-${String(curDate.getDate()).padStart(2,"0")}`;
   const isToday=curDate.toDateString()===today.toDateString();
   const sortedEvs=evOn(ds);
