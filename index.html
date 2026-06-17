@@ -34,24 +34,10 @@ const {useState,useEffect,useRef}=React;
 const SURL="https://ttdioqltjmgalnbkapzi.supabase.co";
 const SKEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR0ZGlvcWx0am1nYWxuYmthcHppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk4MzU1NjksImV4cCI6MjA5NTQxMTU2OX0.KW5DDiC2FUFMFG7BPH87aFp-alarJijx-aGiHwfUW_I";
 const sb=supabase.createClient(SURL,SKEY);
-const SK={years:"sap-years",year:y=>`sap-summer-${y}`,activities:"sap-activities",settings:"sap-settings",kids:"sap-kids",house:"sap-house"};
-// toast helper
-let _toastTimer=null;
-function showToast(msg,type="success"){
-  let el=document.getElementById("app-toast");
-  if(!el){el=document.createElement("div");el.id="app-toast";el.style.cssText="position:fixed;bottom:24px;left:50%;transform:translateX(-50%);padding:10px 20px;borderRadius:10px;fontSize:13px;fontWeight:500;zIndex:9999;transition:opacity 0.3s;pointerEvents:none;";document.body.appendChild(el);}
-  el.style.background=type==="error"?"#7F1D1D":"#052E16";
-  el.style.color=type==="error"?"#FCA5A5":"#4ADE80";
-  el.style.border=`1px solid ${type==="error"?"#EF4444":"#16A34A"}`;
-  el.style.opacity="1";
-  el.textContent=msg;
-  clearTimeout(_toastTimer);
-  _toastTimer=setTimeout(()=>{el.style.opacity="0";},3000);
-}
-
+const SK={years:"sap-years",year:y=>`sap-summer-${y}`,activities:"sap-activities",settings:"sap-settings",kids:"sap-kids"};
 const store={
   get:async k=>{try{const{data,error}=await sb.from("app_data").select("value").eq("key",k).single();if(error||!data)return null;return data.value;}catch{return null;}},
-  set:async(k,v)=>{try{const{error}=await sb.from("app_data").upsert({key:k,value:v,updated_at:new Date().toISOString()},{onConflict:"key"});if(error){console.error("store.set error",k,error);showToast("Save failed: "+error.message,"error");}else{showToast("Saved ✓");}}catch(e){console.error("store.set exception",k,e);showToast("Save error: "+e.message,"error");}},
+  set:async(k,v)=>{try{await sb.from("app_data").upsert({key:k,value:v,updated_at:new Date().toISOString()});}catch(e){console.error(e);}},
 };
 
 const MAPBOX_TOKEN="pk.eyJ1IjoiZHphcGhpcmUiLCJhIjoiY21wdWw5YmY0MXZnNDJwb3NnbTBodjRuaCJ9.MvimgVuQoK1SNZzRHztfMQ";
@@ -225,37 +211,9 @@ function SportModal({sport,sportOptions,onSave,onClose}){
 }
 
 function SessionModal({session,onSave,onClose}){
-  const blank={id:Date.now()+"",name:"",start:"",end:"",cost:"",practiceDays:[],practiceTime:"",practiceLocation:"",practiceDayDetails:[],practiceNotes:"",enrolled:true,meets:[]};
-  // migrate old sessions that only have practiceTime/practiceLocation
-  function migrate(s){
-    if(!s)return blank;
-    if(!s.practiceNotes)s={...s,practiceNotes:""};
-    // build practiceDayDetails from existing days if missing or incomplete
-    const existingDetails=s.practiceDayDetails||[];
-    const mergedDetails=(s.practiceDays||[]).map(day=>{
-      const existing=existingDetails.find(x=>x.day===day);
-      return existing||{day,time:s.practiceTime||"",timeEnd:"",location:s.practiceLocation||""};
-    });
-    s={...s,practiceDayDetails:mergedDetails};
-    return s;
-  }
-  const [s,setS]=useState(migrate(session||blank));
-
-  const tog=d=>{
-    const hasDays=s.practiceDays.includes(d);
-    const newDays=hasDays?s.practiceDays.filter(x=>x!==d):[...s.practiceDays,d];
-    const newDetails=hasDays?s.practiceDayDetails.filter(x=>x.day!==d):[...s.practiceDayDetails,{day:d,time:s.practiceTime||"",timeEnd:"",location:s.practiceLocation||""}];
-    setS({...s,practiceDays:newDays,practiceDayDetails:newDetails});
-  };
-  function updDetail(day,field,val){
-    setS({...s,practiceDayDetails:s.practiceDayDetails.map(d=>d.day===day?{...d,[field]:val}:d)});
-  }
-  // keep legacy practiceTime in sync with first day for backwards compat
-  function save(){
-    const first=s.practiceDayDetails[0];
-    onSave({...s,practiceTime:first?first.time:s.practiceTime,practiceLocation:first?first.location:s.practiceLocation});
-  }
-
+  const blank={id:Date.now()+"",name:"",start:"",end:"",cost:"",practiceDays:[],practiceTime:"",practiceLocation:"",enrolled:true,meets:[]};
+  const [s,setS]=useState(session||blank);
+  const tog=d=>setS({...s,practiceDays:s.practiceDays.includes(d)?s.practiceDays.filter(x=>x!==d):[...s.practiceDays,d]});
   return(
     <Modal title={session?"Edit session":"Add session"} onClose={onClose} wide>
       <F label="Session name"><Inp value={s.name} onChange={v=>setS({...s,name:v})} placeholder="e.g. Spring 2026"/></F>
@@ -264,33 +222,21 @@ function SessionModal({session,onSave,onClose}){
         <F label="End date"><Inp type="date" value={s.end} onChange={v=>setS({...s,end:v})}/></F>
       </div>
       <F label="Cost ($)"><Inp type="number" value={s.cost} onChange={v=>setS({...s,cost:v})}/></F>
-      <F label="Practice days — click to toggle, then set time per day">
-        <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:s.practiceDays.length?10:0}}>
+      <F label="Practice days">
+        <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
           {DAYS.map(d=><button key={d} onClick={()=>tog(d)} style={{padding:"4px 10px",borderRadius:6,border:`1px solid ${s.practiceDays.includes(d)?C.accent:C.border}`,background:s.practiceDays.includes(d)?C.accent:C.card2,color:s.practiceDays.includes(d)?"#fff":C.text2,cursor:"pointer",fontSize:12}}>{d}</button>)}
         </div>
-        {DAYS.filter(d=>s.practiceDays.includes(d)).map(d=>{
-          const det=s.practiceDayDetails.find(x=>x.day===d)||{time:"",timeEnd:"",location:""};
-          return(
-            <div key={d} style={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 12px",marginBottom:6}}>
-              <div style={{fontSize:12,fontWeight:600,color:C.accent,marginBottom:6}}>{d}</div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 2fr",gap:8}}>
-                <F label="Start time"><Inp value={det.time} onChange={v=>updDetail(d,"time",v)} placeholder="4:00 PM"/></F>
-                <F label="End time"><Inp value={det.timeEnd} onChange={v=>updDetail(d,"timeEnd",v)} placeholder="6:00 PM"/></F>
-                <F label="Location"><AddrInp value={det.location} onChange={v=>updDetail(d,"location",v)} placeholder="Practice location"/></F>
-              </div>
-            </div>
-          );
-        })}
       </F>
-      <F label="Practice notes (optional)">
-        <textarea value={s.practiceNotes} onChange={e=>setS({...s,practiceNotes:e.target.value})} placeholder="e.g. Bring cleats on Fridays, meet at back entrance on Thursdays..." rows={3} style={{width:"100%",background:C.card2,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",fontSize:13,color:C.text,resize:"vertical",boxSizing:"border-box",fontFamily:"inherit"}}/>
-      </F>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <F label="Practice time"><Inp value={s.practiceTime} onChange={v=>setS({...s,practiceTime:v})} placeholder="4:00 PM"/></F>
+        <F label="Practice location"><AddrInp value={s.practiceLocation} onChange={v=>setS({...s,practiceLocation:v})} placeholder="Where practices are held"/></F>
+      </div>
       <F label="Enrollment">
         <div style={{display:"flex",gap:8}}>
           {[true,false].map(b=><button key={String(b)} onClick={()=>setS({...s,enrolled:b})} style={{padding:"6px 16px",borderRadius:7,border:`1px solid ${s.enrolled===b?C.accent:C.border}`,background:s.enrolled===b?C.accent:C.card2,color:s.enrolled===b?"#fff":C.text2,cursor:"pointer",fontSize:13}}>{b?"Enrolled":"Reference only"}</button>)}
         </div>
       </F>
-      <div style={{display:"flex",gap:10,marginTop:10}}><Btn onClick={onClose} variant="secondary">Cancel</Btn><Btn onClick={save}>Save session</Btn></div>
+      <div style={{display:"flex",gap:10,marginTop:10}}><Btn onClick={onClose} variant="secondary">Cancel</Btn><Btn onClick={()=>onSave(s)}>Save session</Btn></div>
     </Modal>
   );
 }
@@ -392,17 +338,11 @@ function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClic
       const sc=getSC(sp.name);
       sp.sessions.forEach(sess=>{
         if(!sess.enrolled)return;
-        const start=new Date(sess.start+"T12:00:00"),end=new Date(sess.end+"T12:00:00");
+        const start=new Date(sess.start),end=new Date(sess.end);
         const cur=new Date(start);
         while(cur<=end){
-          const dayName=DAYS[cur.getDay()];
-          if(dayName&&sess.practiceDays.includes(dayName)){
-            const det=(sess.practiceDayDetails||[]).find(x=>x.day===dayName);
-            const timeLabel=det?det.time:sess.practiceTime;
-            const subLabel=det?(det.time+(det.timeEnd?` – ${det.timeEnd}`:"")+( det.location?` · ${det.location}`:"")):sess.practiceTime;
-            const yy=cur.getFullYear(),mm=String(cur.getMonth()+1).padStart(2,"0"),dd=String(cur.getDate()).padStart(2,"0");
-            events.push({date:`${yy}-${mm}-${dd}`,type:"practice",label:sp.name,sub:subLabel||timeLabel,kidKey:sp.kidKey,color:sc.txt,bg:sc.bg,border:sc.border,sportId:sp.id,sessionId:sess.id,meetId:null});
-          }
+          if(DAYS[cur.getDay()]&&sess.practiceDays.includes(DAYS[cur.getDay()]))
+            events.push({date:cur.toISOString().slice(0,10),type:"practice",label:sp.name,sub:sess.practiceTime,kidKey:sp.kidKey,color:sc.txt,bg:sc.bg,border:sc.border,sportId:sp.id,sessionId:sess.id,meetId:null});
           cur.setDate(cur.getDate()+1);
         }
         sess.meets.forEach(m=>{
@@ -419,13 +359,22 @@ function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClic
         const s=summerData.schedule[k.key]?.[wi];
         if(!s||s.a==="Unscheduled")return;
         const c=getTC(s.a);
-        const _sd=new Date(2026,5,22+wi*7);const _sds=`${_sd.getFullYear()}-${String(_sd.getMonth()+1).padStart(2,"0")}-${String(_sd.getDate()).padStart(2,"0")}`;
-        events.push({date:_sds,type:"summer",label:s.a,sub:wk.dates,kidKey:k.key,color:c.txt,bg:c.bg,border:c.border,sportId:null});
+        events.push({date:new Date(2026,5,22+wi*7).toISOString().slice(0,10),type:"summer",label:s.a,sub:wk.dates,kidKey:k.key,color:c.txt,bg:c.bg,border:c.border,sportId:null});
       });
     });
   }
 
-  const evOn=d=>events.filter(e=>e.date===d);
+  // parse time string for sorting — "4:00 PM" → 16.0
+  function parseEvTime(e){
+    const raw=e.type==="practice"?String(e.sub||"").split("–")[0].split("·")[0].trim():String(e.sub||"").split("·")[0].trim();
+    const m=raw.match(/(\d+):(\d+)\s*(AM|PM)/i);
+    if(!m)return 99;
+    let h=parseInt(m[1]),mn=parseInt(m[2]),ap=m[3].toUpperCase();
+    if(ap==="PM"&&h!==12)h+=12;
+    if(ap==="AM"&&h===12)h=0;
+    return h+mn/60;
+  }
+  const evOn=d=>[...events.filter(e=>e.date===d)].sort((a,b)=>parseEvTime(a)-parseEvTime(b));
   const icon=t=>t==="meet"?"★":t==="practice"?"▸":"☀";
 
   function VToggle(){return <div style={{display:"flex",gap:4}}>{["day","week","month"].map(v=><button key={v} onClick={()=>setViewMode(v)} style={{padding:"5px 12px",borderRadius:7,border:`1px solid ${viewMode===v?C.accent:C.border}`,background:viewMode===v?C.accent:C.card2,color:viewMode===v?"#fff":C.text2,cursor:"pointer",fontSize:12,textTransform:"capitalize"}}>{v}</button>)}</div>;}
@@ -435,8 +384,8 @@ function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClic
     const first=new Date(yr,mo,1).getDay(),dim=new Date(yr,mo+1,0).getDate();
     const cells=[];for(let i=0;i<first;i++)cells.push(null);for(let d=1;d<=dim;d++)cells.push(d);
     return(
-      <div style={{display:"flex",flexDirection:"column",height:"calc(100vh - 180px)",minHeight:500}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexShrink:0}}>
+      <div>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
           <div style={{display:"flex",gap:6,alignItems:"center"}}>
             <button onClick={()=>setCurDate(new Date(yr,mo-1,1))} style={{padding:"5px 11px",borderRadius:7,border:`1px solid ${C.border}`,background:C.card2,cursor:"pointer",fontSize:14,color:C.text}}>‹</button>
             <span style={{fontWeight:600,fontSize:15,color:C.text}}>{MONTHS[mo]} {yr}</span>
@@ -444,20 +393,18 @@ function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClic
           </div>
           <VToggle/>
         </div>
-        <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:"hidden",flex:1,display:"flex",flexDirection:"column"}}>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",flexShrink:0}}>
+        <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:"hidden"}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)"}}>
             {DAYS.map((d,i)=><div key={d} style={{textAlign:"center",fontSize:11,fontWeight:600,color:C.text2,padding:"8px 0",background:C.card3,borderRight:i<6?`1px solid ${C.border}`:"none"}}>{d}</div>)}
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gridAutoRows:"1fr",flex:1}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)"}}>
             {cells.map((d,i)=>{
-              const col=i%7;
-              const borderR=col<6?`1px solid ${C.border}`:"none";
-              if(!d)return <div key={i} style={{background:"#13151F",borderRight:borderR,borderTop:`1px solid ${C.border}`,height:"100%"}}/>;
+              if(!d)return <div key={i} style={{minHeight:80,background:"#13151F",borderRight:i%7<6?`1px solid ${C.border}`:"none",borderTop:`1px solid ${C.border}`}}/>;
               const ds=`${yr}-${String(mo+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
               const evs=evOn(ds);
               const isToday=today.getDate()===d&&today.getMonth()===mo&&today.getFullYear()===yr;
               return(
-                <div key={i} style={{background:isToday?"#0F1D35":C.card,borderRight:borderR,borderTop:`1px solid ${C.border}`,padding:"4px",overflow:"hidden"}}>
+                <div key={i} style={{minHeight:80,background:isToday?"#0F1D35":C.card,borderRight:i%7<6?`1px solid ${C.border}`:"none",borderTop:`1px solid ${C.border}`,padding:"3px 4px"}}>
                   <div onClick={()=>{setCurDate(new Date(yr,mo,d));setViewMode("day");}} style={{fontSize:12,fontWeight:isToday?700:400,display:"inline-flex",alignItems:"center",justifyContent:"center",width:22,height:22,borderRadius:"50%",background:isToday?C.accent:"transparent",color:isToday?"#fff":C.text3,marginBottom:2,cursor:"pointer"}}>{d}</div>
                   {evs.slice(0,3).map((e,ei)=><div key={ei} onClick={()=>onEventClick(e)} title={e.label} style={{background:e.bg,color:e.color,border:`1px solid ${e.border}`,borderRadius:4,padding:"1px 4px",fontSize:10,fontWeight:500,marginBottom:2,cursor:"pointer",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",opacity:e.notAttending?0.4:1}}>{icon(e.type)} {e.label}</div>)}
                   {evs.length>3&&<div style={{fontSize:9,color:C.text3,cursor:"pointer"}} onClick={()=>{setCurDate(new Date(yr,mo,d));setViewMode("day");}}>+{evs.length-3} more</div>}
@@ -473,8 +420,8 @@ function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClic
     const ws=new Date(curDate);ws.setDate(ws.getDate()-ws.getDay());
     const wds=Array.from({length:7},(_,i)=>{const d=new Date(ws);d.setDate(d.getDate()+i);return d;});
     return(
-      <div style={{display:"flex",flexDirection:"column",height:"calc(100vh - 180px)",minHeight:500}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexShrink:0}}>
+      <div>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
           <div style={{display:"flex",gap:6,alignItems:"center"}}>
             <button onClick={()=>{const d=new Date(curDate);d.setDate(d.getDate()-7);setCurDate(d);}} style={{padding:"5px 11px",borderRadius:7,border:`1px solid ${C.border}`,background:C.card2,cursor:"pointer",fontSize:14,color:C.text}}>‹</button>
             <span style={{fontWeight:600,fontSize:14,color:C.text}}>{wds[0].toLocaleDateString("en-US",{month:"short",day:"numeric"})} – {wds[6].toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</span>
@@ -482,11 +429,11 @@ function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClic
           </div>
           <VToggle/>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gridAutoRows:"1fr",border:`1px solid ${C.border}`,borderRadius:10,overflow:"hidden",flex:1}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",border:`1px solid ${C.border}`,borderRadius:10,overflow:"hidden"}}>
           {wds.map((wd,i)=>{
-            const ds=`${wd.getFullYear()}-${String(wd.getMonth()+1).padStart(2,"0")}-${String(wd.getDate()).padStart(2,"0")}`,evs=evOn(ds),isToday=wd.toDateString()===today.toDateString();
+            const ds=wd.toISOString().slice(0,10),evs=evOn(ds),isToday=wd.toDateString()===today.toDateString();
             return(
-              <div key={i} style={{background:isToday?"#0F1D35":C.card,borderRight:i<6?`1px solid ${C.border}`:"none",padding:"6px 5px",minHeight:120}}>
+              <div key={i} style={{minHeight:120,background:isToday?"#0F1D35":C.card,borderRight:i<6?`1px solid ${C.border}`:"none",padding:"6px 5px"}}>
                 <div onClick={()=>{setCurDate(wd);setViewMode("day");}} style={{fontSize:11,fontWeight:600,color:isToday?"#fff":C.text2,marginBottom:4,cursor:"pointer",display:"inline-flex",flexDirection:"column",alignItems:"center",background:isToday?C.accent:"transparent",borderRadius:6,padding:isToday?"2px 6px":"0"}}>
                   <span style={{fontSize:10}}>{DAYS[i]}</span><span style={{fontSize:14}}>{wd.getDate()}</span>
                 </div>
@@ -498,36 +445,152 @@ function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClic
       </div>
     );
   }
-  const ds=`${curDate.getFullYear()}-${String(curDate.getMonth()+1).padStart(2,"0")}-${String(curDate.getDate()).padStart(2,"0")}`,evs=evOn(ds),isToday=curDate.toDateString()===today.toDateString();
+  // ── Day view — time ruler + right panel ──
+  const ds=`${curDate.getFullYear()}-${String(curDate.getMonth()+1).padStart(2,"0")}-${String(curDate.getDate()).padStart(2,"0")}`;
+  const isToday=curDate.toDateString()===today.toDateString();
+  const [selEv,setSelEv]=useState(null);
+
+  // parse "4:00 PM" / "10:30 AM" → fractional hours (e.g. 16.0, 10.5)
+  function parseHour(str){
+    if(!str)return null;
+    const m=String(str).match(/(\d+):(\d+)\s*(AM|PM)/i);
+    if(!m)return null;
+    let h=parseInt(m[1]),mn=parseInt(m[2]),ampm=m[3].toUpperCase();
+    if(ampm==="PM"&&h!==12)h+=12;
+    if(ampm==="AM"&&h===12)h=0;
+    return h+mn/60;
+  }
+
+  // attach parsed hour to each event
+  function getEvTime(e){
+    if(e.type==="practice"){
+      const t=e.sub||(e.practiceTime||"");
+      // sub may be "5:30 PM – 6:30 PM · Location" — grab first time
+      const first=String(t).split("–")[0].trim().split("·")[0].trim();
+      return parseHour(first);
+    }
+    if(e.type==="meet") return parseHour(e.meetTime||e.sub?.split("·")[0]?.trim()||"");
+    return null;
+  }
+
+  const rawEvs=evOn(ds);
+  // sort by time; events with no time go last
+  const sortedEvs=[...rawEvs].sort((a,b)=>{
+    const ta=getEvTime(a),tb=getEvTime(b);
+    if(ta===null&&tb===null)return 0;
+    if(ta===null)return 1;
+    if(tb===null)return -1;
+    return ta-tb;
+  });
+
+  // determine ruler range
+  const hours=sortedEvs.map(e=>getEvTime(e)).filter(h=>h!==null);
+  const minH=hours.length?Math.floor(Math.min(...hours)):8;
+  const maxH=hours.length?Math.ceil(Math.max(...hours)+1):20;
+  const rulerStart=Math.max(0,minH-1);
+  const rulerEnd=Math.min(24,maxH+1);
+  const rulerHours=Array.from({length:rulerEnd-rulerStart},(_,i)=>rulerStart+i);
+  const PX_PER_HOUR=64;
+  const rulerH=rulerHours.length*PX_PER_HOUR;
+
+  function fmtHour(h){
+    const ampm=h>=12?"PM":"AM";
+    const h12=h===0?12:h>12?h-12:h;
+    return `${h12} ${ampm}`;
+  }
+
   return(
-    <div>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+    <div style={{display:"flex",flexDirection:"column",height:"calc(100vh - 180px)",minHeight:500}}>
+      {/* header */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexShrink:0}}>
         <div style={{display:"flex",gap:6,alignItems:"center"}}>
-          <button onClick={()=>{const d=new Date(curDate);d.setDate(d.getDate()-1);setCurDate(d);}} style={{padding:"5px 11px",borderRadius:7,border:`1px solid ${C.border}`,background:C.card2,cursor:"pointer",fontSize:14,color:C.text}}>‹</button>
+          <button onClick={()=>{const d=new Date(curDate);d.setDate(d.getDate()-1);setCurDate(d);setSelEv(null);}} style={{padding:"5px 11px",borderRadius:7,border:`1px solid ${C.border}`,background:C.card2,cursor:"pointer",fontSize:14,color:C.text}}>‹</button>
           <span style={{fontWeight:600,fontSize:15,color:isToday?C.accent:C.text}}>{curDate.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"})}{isToday?" — Today":""}</span>
-          <button onClick={()=>{const d=new Date(curDate);d.setDate(d.getDate()+1);setCurDate(d);}} style={{padding:"5px 11px",borderRadius:7,border:`1px solid ${C.border}`,background:C.card2,cursor:"pointer",fontSize:14,color:C.text}}>›</button>
+          <button onClick={()=>{const d=new Date(curDate);d.setDate(d.getDate()+1);setCurDate(d);setSelEv(null);}} style={{padding:"5px 11px",borderRadius:7,border:`1px solid ${C.border}`,background:C.card2,cursor:"pointer",fontSize:14,color:C.text}}>›</button>
         </div>
         <VToggle/>
       </div>
-      {evs.length===0&&<div style={{textAlign:"center",padding:"40px 20px",color:C.text3,fontSize:13}}>Nothing scheduled this day.</div>}
-      {evs.map((e,i)=>{
-        const kid=kids.find(k=>k.key===e.kidKey);
-        return(
-          <div key={i} onClick={()=>onEventClick(e)} style={{background:e.bg,border:`1px solid ${e.border}`,borderLeft:`4px solid ${e.color}`,borderRadius:10,padding:"14px 16px",marginBottom:10,cursor:"pointer"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-              <div><div style={{fontWeight:600,fontSize:14,color:e.color,marginBottom:3}}>{icon(e.type)} {e.label}</div>{e.sub&&<div style={{fontSize:12,color:C.text2}}>{e.sub}</div>}</div>
-              {kid&&<KidPill kid={kid}/>}
+      {/* body: ruler + panel */}
+      <div style={{display:"flex",flex:1,gap:0,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden",minHeight:0}}>
+        {/* time ruler column */}
+        <div style={{flex:1,overflowY:"auto",minWidth:0}}>
+          {sortedEvs.length===0?(
+            <div style={{textAlign:"center",padding:"60px 20px",color:C.text3,fontSize:13}}>Nothing scheduled this day.</div>
+          ):(
+            <div style={{position:"relative",height:rulerH+32,paddingTop:16}}>
+              {/* hour lines */}
+              {rulerHours.map((h,i)=>(
+                <div key={h} style={{position:"absolute",top:16+i*PX_PER_HOUR,left:0,right:0,display:"flex",alignItems:"flex-start",pointerEvents:"none"}}>
+                  <div style={{width:52,flexShrink:0,textAlign:"right",paddingRight:10,fontSize:10,color:C.text3,marginTop:-7}}>{fmtHour(h)}</div>
+                  <div style={{flex:1,height:"0.5px",background:C.border,marginTop:0}}></div>
+                </div>
+              ))}
+              {/* event blocks */}
+              {sortedEvs.map((e,i)=>{
+                const hr=getEvTime(e);
+                const topPx=hr!==null?16+(hr-rulerStart)*PX_PER_HOUR:16+i*56;
+                // try to parse duration from sub "5:30 PM – 6:30 PM"
+                let durH=1;
+                if(e.sub){
+                  const parts=String(e.sub).split("–");
+                  if(parts.length>=2){
+                    const t1=parseHour(parts[0].trim()),t2=parseHour(parts[1].split("·")[0].trim());
+                    if(t1!==null&&t2!==null&&t2>t1)durH=t2-t1;
+                  }
+                }
+                const blockH=Math.max(40,durH*PX_PER_HOUR-4);
+                const isSelected=selEv&&selEv._idx===i;
+                const kid=kids.find(k=>k.key===e.kidKey);
+                return(
+                  <div key={i} onClick={()=>setSelEv(isSelected?null:{...e,_idx:i})}
+                    style={{position:"absolute",top:topPx,left:60,right:8,height:blockH,background:isSelected?e.color:e.bg,border:`1.5px solid ${isSelected?"transparent":e.border}`,borderLeft:`4px solid ${e.color}`,borderRadius:"0 8px 8px 0",padding:"5px 10px",cursor:"pointer",overflow:"hidden",transition:"background 0.12s",zIndex:isSelected?2:1}}>
+                    <div style={{fontSize:12,fontWeight:500,color:isSelected?"#fff":e.color,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{icon(e.type)} {e.label}</div>
+                    {hr!==null&&<div style={{fontSize:10,color:isSelected?"rgba(255,255,255,0.8)":C.text2,marginTop:2}}>{e.sub?.split("·")[0]?.trim()||fmtHour(Math.floor(hr))}</div>}
+                    {kid&&<div style={{marginTop:3}}><KidPill kid={kid} small/></div>}
+                  </div>
+                );
+              })}
             </div>
-            <div style={{fontSize:11,color:C.text3,marginTop:8}}>Tap to edit →</div>
-          </div>
-        );
-      })}
+          )}
+        </div>
+        {/* right detail panel */}
+        {selEv&&(()=>{
+          const kid=kids.find(k=>k.key===selEv.kidKey);
+          const sport=sports.find(s=>s.id===selEv.sportId);
+          const sess=sport?.sessions.find(s=>s.id===selEv.sessionId);
+          const meet=sess?.meets.find(m=>m.id===selEv.meetId);
+          return(
+            <div style={{width:240,flexShrink:0,borderLeft:`1px solid ${C.border}`,background:C.card2,display:"flex",flexDirection:"column",overflowY:"auto"}}>
+              <div style={{height:3,background:selEv.color,flexShrink:0}}></div>
+              <div style={{padding:"12px 14px",flex:1}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
+                  <div style={{fontSize:13,fontWeight:500,color:selEv.color,lineHeight:1.3,flex:1,marginRight:8}}>{selEv.label}</div>
+                  <button onClick={()=>setSelEv(null)} style={{background:"none",border:`0.5px solid ${C.border}`,borderRadius:5,cursor:"pointer",fontSize:12,color:C.text3,padding:"2px 7px",flexShrink:0}}>✕</button>
+                </div>
+                <div style={{fontSize:11,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em",color:C.text3,marginBottom:4}}>
+                  {selEv.type==="practice"?"Practice":selEv.type==="meet"?"Meet / game":"Summer"}
+                </div>
+                {selEv.sub&&<div style={{fontSize:12,color:C.text2,marginBottom:8,lineHeight:1.5}}>{selEv.sub}</div>}
+                {kid&&<div style={{marginBottom:8}}><KidPill kid={kid}/></div>}
+                {sport&&<div style={{fontSize:12,color:C.text2,marginBottom:4}}>{sport.teamName||sport.location||""}</div>}
+                {sess&&<div style={{fontSize:11,color:C.text3,marginBottom:4}}>{sess.name}</div>}
+                {meet&&meet.location&&<div style={{fontSize:11,color:C.text3,marginBottom:4}}>{meet.location}</div>}
+                {selEv.type!=="summer"&&(
+                  <button onClick={()=>{setSelEv(null);onEventClick(selEv);}} style={{width:"100%",marginTop:10,padding:"7px",borderRadius:7,border:`1px solid ${C.color||C.accent}`,background:"transparent",cursor:"pointer",fontSize:12,color:selEv.color}}>
+                    {selEv.type==="meet"?"Edit meet →":"Open activity →"}
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+      </div>
     </div>
   );
 }
 
 // ── Kid Profile Page ──
-function KidProfilePage({kidKey,kids,sports,yearData,years,onBack,onNavigateToSport}){
+function KidProfilePage({kidKey,kids,sports,yearData,years,onBack}){
   const [tab,setTab]=useState("activities");
   const [journalEntry,setJournalEntry]=useState("");
   const [savedNotes,setSavedNotes]=useState([]);
@@ -538,7 +601,7 @@ function KidProfilePage({kidKey,kids,sports,yearData,years,onBack,onNavigateToSp
   const allSessions=kidSports.flatMap(sp=>sp.sessions.map(s=>({...s,sportName:sp.name,teamName:sp.teamName})));
   const totalSpend=allSessions.filter(s=>s.enrolled).reduce((sum,s)=>sum+Number(s.cost||0),0);
   const allResults=kidSports.flatMap(sp=>sp.sessions.flatMap(sess=>sess.meets.filter(m=>m.results.some(r=>r.kidKey===kidKey)).map(m=>({...m,sportName:sp.name,sessName:sess.name,results:m.results.filter(r=>r.kidKey===kidKey)}))));
-  const TABS=[{k:"activities",l:"Activities"},{k:"memberships",l:"Memberships"},{k:"results",l:"Results"},{k:"finances",l:"Finances"},{k:"summer",l:"Summer"},{k:"notes",l:"Notes"}];
+  const TABS=[{k:"activities",l:"Activities"},{k:"results",l:"Results"},{k:"finances",l:"Finances"},{k:"summer",l:"Summer"},{k:"notes",l:"Notes"}];
   const today=new Date();
   return(
     <div>
@@ -562,58 +625,18 @@ function KidProfilePage({kidKey,kids,sports,yearData,years,onBack,onNavigateToSp
         {TABS.map(t=><button key={t.k} onClick={()=>setTab(t.k)} style={{padding:"7px 16px",borderRadius:8,border:`1px solid ${tab===t.k?kid.color:C.border}`,background:tab===t.k?kid.bg:C.card2,color:tab===t.k?kid.color:C.text2,cursor:"pointer",fontSize:13,fontWeight:tab===t.k?600:400}}>{t.l}</button>)}
       </div>
       {tab==="activities"&&(
-        <div>
-          {kidSports.length===0&&<div style={{color:C.text3,fontSize:13,padding:"30px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:12}}>No activities yet.</div>}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:12}}>
+          {kidSports.length===0&&<div style={{color:C.text3,fontSize:13,padding:"30px",textAlign:"center",gridColumn:"1/-1"}}>No activities yet.</div>}
           {kidSports.map(sp=>{
             const sc=getSC(sp.name);
             const isActive=sp.sessions.some(s=>s.enrolled);
-            const activeSess=sp.sessions.find(s=>s.enrolled&&(!s.end||new Date(s.end+"T12:00:00")>=today));
-            const pastSessions=sp.sessions.filter(s=>s.end&&new Date(s.end+"T12:00:00")<today);
+            const icon2=SPORT_ICON[sp.name]||"🎯";
             return(
-              <div key={sp.id} style={{border:`1px solid ${isActive?sc.border:C.border}`,borderLeft:`3px solid ${sc.txt}`,borderRadius:12,marginBottom:10,overflow:"hidden",background:C.card,opacity:isActive?1:0.75}}>
-                {/* sport header — click to go to main sport detail */}
-                <div onClick={()=>onNavigateToSport&&onNavigateToSport(sp.id)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"13px 16px",cursor:"pointer",background:isActive?sc.bg:C.card}}
-                  onMouseEnter={e=>e.currentTarget.style.opacity="0.8"}
-                  onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
-                  <div>
-                    <div style={{fontSize:14,fontWeight:600,color:sc.txt,marginBottom:2}}>{sp.name}</div>
-                    <div style={{fontSize:12,color:C.text2}}>{sp.teamName||sp.location||""}</div>
-                  </div>
-                  <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    {isActive&&<span style={{fontSize:10,background:"#052E16",color:"#4ADE80",padding:"2px 8px",borderRadius:20}}>Active</span>}
-                    <span style={{fontSize:12,color:C.accent}}>Open ›</span>
-                  </div>
-                </div>
-                {/* sessions list — each clickable */}
-                {sp.sessions.length>0&&(
-                  <div style={{borderTop:`1px solid ${C.border}`}}>
-                    {[...sp.sessions].sort((a,b)=>(b.start||"").localeCompare(a.start||"")).map(sess=>{
-                      const isPast=sess.end&&new Date(sess.end+"T12:00:00")<today;
-                      const isActiveSess=sess.enrolled&&!isPast;
-                      const pracDays=sess.practiceDays||[];
-                      const details=sess.practiceDayDetails||[];
-                      const times=[...new Set(details.map(d=>d.time).filter(Boolean))];
-                      const schedLabel=pracDays.length>0?(times.length===1?`${pracDays.join(" · ")} · ${times[0]}`:pracDays.join(" · ")):"";
-                      return(
-                        <div key={sess.id} onClick={()=>onNavigateToSport&&onNavigateToSport(sp.id,sess.id)}
-                          style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"9px 16px 9px 20px",borderBottom:`1px solid ${C.border}`,cursor:"pointer",opacity:isPast?0.6:1}}
-                          onMouseEnter={e=>e.currentTarget.style.background=C.card2}
-                          onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                          <div>
-                            <div style={{fontSize:12,fontWeight:500,color:isActiveSess?sc.txt:C.text,marginBottom:1}}>{sess.name}</div>
-                            <div style={{fontSize:11,color:C.text3}}>{fmtDate(sess.start)} – {fmtDate(sess.end)}{schedLabel?` · ${schedLabel}`:""}</div>
-                            {sess.meets.length>0&&<div style={{fontSize:10,color:C.text3,marginTop:1}}>{sess.meets.length} meet{sess.meets.length!==1?"s":""}</div>}
-                          </div>
-                          <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
-                            {sess.cost&&<span style={{fontSize:11,color:C.text2}}>{fmtMoney(sess.cost)}</span>}
-                            <span style={{fontSize:10,background:isActiveSess?"#052E16":isPast?"#1F2937":"#2D2005",color:isActiveSess?"#4ADE80":isPast?"#6B7280":"#FCD34D",padding:"1px 7px",borderRadius:20}}>{isActiveSess?"Active":isPast?"Past":"Upcoming"}</span>
-                            <span style={{fontSize:11,color:C.text3}}>›</span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+              <div key={sp.id} style={{background:isActive?sc.bg:C.card2,border:`1.5px solid ${isActive?sc.border:C.border}`,borderRadius:12,padding:16,opacity:isActive?1:0.6}}>
+                <div style={{fontSize:28,marginBottom:8}}>{icon2}</div>
+                <div style={{fontWeight:700,fontSize:14,color:isActive?sc.txt:C.text2,marginBottom:3}}>{sp.name}</div>
+                <div style={{fontSize:12,color:"#64748B",marginBottom:8}}>{sp.teamName}</div>
+                {sp.sessions.map(sess=>{const isPast=sess.end&&new Date(sess.end+"T12:00:00")<today;return(<div key={sess.id} style={{background:"rgba(0,0,0,0.2)",borderRadius:6,padding:"5px 8px",marginBottom:4}}><div style={{fontSize:11,color:isPast?C.text3:sc.txt,fontWeight:500}}>{sess.name}</div><div style={{fontSize:10,color:"#4A5568"}}>{isPast?"Past":sess.enrolled?"Active":"Reference"} · {sess.practiceDays.join(", ")}</div></div>);})}
               </div>
             );
           })}
@@ -658,54 +681,6 @@ function KidProfilePage({kidKey,kids,sports,yearData,years,onBack,onNavigateToSp
               </div>
             </div>
           );})}
-        </div>
-      )}
-      {tab==="memberships"&&(
-        <div>
-          {(()=>{
-            const today=new Date();
-            const allMems=kidSports.flatMap(sp=>(sp.memberships||[]).map(m=>({...m,sportId:sp.id,sportName:sp.name,sc:getSC(sp.name)})));
-            const active=allMems.filter(m=>!m.expDate||new Date(m.expDate+"T12:00:00")>=today);
-            const expired=allMems.filter(m=>m.expDate&&new Date(m.expDate+"T12:00:00")<today);
-            function renderRow(m,isExpired){
-              const daysLeft=m.expDate?Math.round((new Date(m.expDate+"T12:00:00")-today)/(1000*60*60*24)):null;
-              const expiringSoon=daysLeft!==null&&daysLeft<=60&&daysLeft>0;
-              return(
-                <div key={m.id} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 0",borderBottom:`1px solid ${C.border}`,opacity:isExpired?0.6:1}}>
-                  <div style={{width:36,height:36,borderRadius:8,background:m.sc.bg,border:`1px solid ${m.sc.border}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                    <span style={{fontSize:10,fontWeight:600,color:m.sc.txt}}>{m.sportName.slice(0,2).toUpperCase()}</span>
-                  </div>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3,flexWrap:"wrap"}}>
-                      <span style={{fontSize:13,fontWeight:600,color:C.text}}>{m.name}</span>
-                      <span style={{fontSize:10,background:m.sc.bg,color:m.sc.txt,border:`1px solid ${m.sc.border}`,padding:"1px 7px",borderRadius:4}}>{m.sportName}</span>
-                      {!isExpired&&<span style={{fontSize:10,background:"#052E16",color:"#4ADE80",padding:"1px 7px",borderRadius:20}}>Current</span>}
-                      {isExpired&&<span style={{fontSize:10,background:"#1F2937",color:"#6B7280",padding:"1px 7px",borderRadius:20}}>Expired</span>}
-                      {expiringSoon&&<span style={{fontSize:10,background:"#2D1A05",color:"#FCD34D",padding:"1px 7px",borderRadius:20}}>Expires in {daysLeft}d</span>}
-                    </div>
-                    <div style={{display:"flex",gap:14,flexWrap:"wrap",fontSize:11,color:C.text3}}>
-                      {m.memberNumber&&<span>#{m.memberNumber}</span>}
-                      {m.memberType&&<span>{m.memberType}</span>}
-                      {m.expDate&&<span>Exp {fmtDate(m.expDate)}</span>}
-                      {m.cost&&<span>· {fmtMoney(Number(m.cost))}</span>}
-                    </div>
-                    {m.orgUrl&&<a href={m.orgUrl} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:C.accent,marginTop:2,display:"block"}}>Portal ↗</a>}
-                    {m.notes&&<div style={{fontSize:11,color:C.text3,marginTop:3,fontStyle:"italic"}}>{m.notes}</div>}
-                  </div>
-                </div>
-              );
-            }
-            if(allMems.length===0)return <div style={{textAlign:"center",padding:"40px",color:C.text3,fontSize:13,border:`1px dashed ${C.border}`,borderRadius:12}}>No memberships added yet. Go to Activities → Memberships to add them.</div>;
-            return(
-              <div style={{border:`1px solid ${C.border}`,borderRadius:12,padding:"0 16px",background:C.card}}>
-                {active.length>0&&active.map(m=>renderRow(m,false))}
-                {expired.length>0&&(<>
-                  <div style={{fontSize:11,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em",color:C.text3,padding:"10px 0 4px"}}>Expired</div>
-                  {expired.map(m=>renderRow(m,true))}
-                </>)}
-              </div>
-            );
-          })()}
         </div>
       )}
       {tab==="notes"&&(
@@ -902,33 +877,13 @@ function Dashboard({sports,summerData,conflicts,kids,onNavigate}){
 }
 
 // ── Activities Page ──
-function ActivitiesPage({sports,setSports,conflicts,setConflicts,summerData,settings,initialTab,kids,onKidClick,sportNavTarget,onSportNavConsumed}){
-  // membership state
-  const [editMembership,setEditMembership]=useState(null);
-  const [addMembershipSportId,setAddMembershipSportId]=useState(null);
-  function saveMembership(sportId,mem){
-    setSports(sports.map(sp=>sp.id===sportId?{...sp,memberships:[...(sp.memberships||[]).filter(m=>m.id!==mem.id),mem]}:sp));
-    setEditMembership(null);setAddMembershipSportId(null);
-  }
-  function deleteMembership(sportId,memId){
-    setSports(sports.map(sp=>sp.id===sportId?{...sp,memberships:(sp.memberships||[]).filter(m=>m.id!==memId)}:sp));
-  }
+function ActivitiesPage({sports,setSports,conflicts,setConflicts,summerData,settings,initialTab,kids,onKidClick}){
   const [sub,setSub]=useState(initialTab||"calendar");
   const [showSummer,setShowSummer]=useState(true);
   const [showEC,setShowEC]=useState(true);
   const [filterKid,setFilterKid]=useState("all");
   const [filterSport,setFilterSport]=useState("all");
   const [selectedSportId,setSelectedSportId]=useState(null);
-  const [detailTab,setDetailTab]=useState("overview");
-  // consume navigation target from kid profile
-  useEffect(()=>{
-    if(sportNavTarget&&sportNavTarget.sportId){
-      setSub("activities");
-      setSelectedSportId(sportNavTarget.sportId);
-      setDetailTab(sportNavTarget.sessId?"sessions":"overview");
-      if(onSportNavConsumed)onSportNavConsumed();
-    }
-  },[sportNavTarget]);
   const [addSport,setAddSport]=useState(false);
   const [editSport,setEditSport]=useState(null);
   const [addSession,setAddSession]=useState(null);
@@ -960,7 +915,7 @@ function ActivitiesPage({sports,setSports,conflicts,setConflicts,summerData,sett
   function resolveConflict(c,meetId){setConflicts(conflicts.map(x=>x.kidKey===c.kidKey&&x.date===c.date?{...x,chosen:meetId}:x));}
 
   const filtered=sports.filter(s=>(filterKid==="all"||s.kidKey===filterKid)&&(filterSport==="all"||s.name===filterSport));
-  const SUBTABS=[{k:"calendar",l:"📅 Calendar"},{k:"activities",l:"🎯 Activities"},{k:"results",l:"🏆 Results"},{k:"finances",l:"💰 Finances"},{k:"memberships",l:"🪪 Memberships"}];
+  const SUBTABS=[{k:"calendar",l:"📅 Calendar"},{k:"activities",l:"🎯 Activities"},{k:"results",l:"🏆 Results"},{k:"finances",l:"💰 Finances"}];
   const today=new Date();
 
   // ── Finances sub-component ──
@@ -1009,103 +964,9 @@ function ActivitiesPage({sports,setSports,conflicts,setConflicts,summerData,sett
     const icon2=SPORT_ICON[sp.name]||"🎯";
     const kid=kids.find(k=>k.key===sp.kidKey);
     const today2=new Date();
-
-    // derive active session (enrolled + not past), else most recent enrolled
-    const activeSess=sp.sessions.find(s=>{
-      if(!s.enrolled)return false;
-      const end=s.end?new Date(s.end+"T12:00:00"):null;
-      return !end||end>=today2;
-    })||sp.sessions.filter(s=>s.enrolled).slice(-1)[0]||sp.sessions[0]||null;
-
-    // upcoming meets across all sessions
-    const allMeets=sp.sessions.flatMap(sess=>sess.meets.map(m=>({...m,sessId:sess.id,sessName:sess.name})));
-    const upcomingMeets=allMeets.filter(m=>{const d=new Date((m.dateStart||m.date)+"T12:00:00");return d>=today2;}).sort((a,b)=>new Date((a.dateStart||a.date)+"T12:00:00")-new Date((b.dateStart||b.date)+"T12:00:00"));
-    const pastMeets=allMeets.filter(m=>{const d=new Date((m.dateStart||m.date)+"T12:00:00");return d<today2;}).sort((a,b)=>new Date((b.dateStart||b.date)+"T12:00:00")-new Date((a.dateStart||a.date)+"T12:00:00"));
-    const allResults=allMeets.filter(m=>m.results&&m.results.length>0);
-
-    // next practice day calc
-    function nextPracticeDate(sess){
-      if(!sess||!sess.practiceDays||sess.practiceDays.length===0)return null;
-      const dayMap={Sun:0,Mon:1,Tue:2,Wed:3,Thu:4,Fri:5,Sat:6};
-      const indices=sess.practiceDays.map(d=>dayMap[d]).filter(d=>d!==undefined);
-      if(!indices.length)return null;
-      const sessEnd=sess.end?new Date(sess.end+"T12:00:00"):null;
-      for(let i=0;i<21;i++){
-        const d=new Date(today2);d.setDate(today2.getDate()+i);
-        if(sessEnd&&d>sessEnd)break;
-        if(indices.includes(d.getDay()))return d;
-      }
-      return null;
-    }
-    // returns next N upcoming practice dates with per-day details
-    function nextPracticeDates(sess,n=5){
-      if(!sess||!sess.practiceDays||sess.practiceDays.length===0)return[];
-      const dayMap={Sun:0,Mon:1,Tue:2,Wed:3,Thu:4,Fri:5,Sat:6};
-      const indices=sess.practiceDays.map(d=>dayMap[d]).filter(d=>d!==undefined);
-      const sessEnd=sess.end?new Date(sess.end+"T12:00:00"):null;
-      const results=[];
-      for(let i=0;i<60&&results.length<n;i++){
-        const d=new Date(today2);d.setDate(today2.getDate()+i);
-        if(sessEnd&&d>sessEnd)break;
-        if(indices.includes(d.getDay())){
-          const dayName=DAYS[d.getDay()];
-          const det=(sess.practiceDayDetails||[]).find(x=>x.day===dayName);
-          results.push({date:d,dayName,time:det?det.time:sess.practiceTime,timeEnd:det?det.timeEnd:"",location:det?det.location:sess.practiceLocation});
-        }
-      }
-      return results;
-    }
-    const nextPrac=activeSess?nextPracticeDate(activeSess):null;
-    const diffDays=nextPrac?Math.round((nextPrac-today2)/(1000*60*60*24)):null;
-    const nextPracLabel=diffDays===0?"Today":diffDays===1?"Tomorrow":`In ${diffDays} days`;
-
-    // stat bar shortcut → tab  (state lives at ActivitiesPage level)
-
-    // shared meet row — plain function (not a React component) to avoid nested-component crashes
-    function renderMeetRow(m,sessId,sessName,isPast){
-      const conf=conflicts.find(c=>c.kidKey===sp.kidKey&&c.date===(m.dateStart||m.date));
-      const notAtt=conf&&conf.chosen&&conf.chosen!==m.id;
-      const isMulti=m.dateEnd&&m.dateEnd!==m.dateStart;
-      const mDate=m.dateStart||m.date||"";
-      const d=mDate?new Date(mDate+"T12:00:00"):null;
-      const mo=d?d.toLocaleDateString("en-US",{month:"short"}):"";
-      const dy=d?d.getDate():"";
-      const diffD=d?Math.round((d-today2)/(1000*60*60*24)):null;
-      const countdownLabel=diffD===0?"Today":diffD===1?"Tomorrow":diffD>1?`In ${diffD} days`:"";
-      return(
-        <div key={m.id} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"11px 0",borderBottom:`1px solid ${C.border}`,opacity:isPast?0.55:notAtt?0.4:1}}>
-          <div style={{width:42,flexShrink:0,textAlign:"center"}}>
-            <div style={{fontSize:10,textTransform:"uppercase",color:C.text3}}>{mo}</div>
-            <div style={{fontSize:20,fontWeight:600,color:isPast?C.text2:sc.txt,lineHeight:1.1}}>{dy}</div>
-          </div>
-          <div style={{flex:1,minWidth:0}}>
-            <div style={{fontSize:13,fontWeight:600,color:isPast?C.text2:C.text,marginBottom:2}}>{notAtt?"✗":isPast?"✓":"★"} {m.name}{isMulti?" (multi-day)":""}</div>
-            <div style={{fontSize:11,color:C.text3,marginBottom:4}}>
-              {isMulti?`${fmtDate(m.dateStart)} – ${fmtDate(m.dateEnd)}`:fmtDate(mDate)}{m.time?` · ${m.time}`:""}
-              {m.location?` · ${m.location}`:""}
-              {sessName?<span style={{marginLeft:6,background:C.card3,color:C.text3,fontSize:10,padding:"1px 6px",borderRadius:4}}>{sessName}</span>:null}
-            </div>
-            {!isPast&&countdownLabel&&<span style={{fontSize:10,background:"#052E16",color:"#4ADE80",padding:"2px 8px",borderRadius:20}}>{countdownLabel}</span>}
-            {m.results&&m.results.length>0&&<div style={{marginTop:5,display:"flex",gap:4,flexWrap:"wrap"}}>{m.results.map((r,ri)=><span key={ri} style={{fontSize:10,background:"#0C2340",color:"#38BDF8",padding:"2px 7px",borderRadius:4}}>{r.event}: {r.time} · {r.place}{r.notes?` · ${r.notes}`:""}</span>)}</div>}
-          </div>
-          <div style={{display:"flex",gap:4,flexShrink:0}}>
-            <Btn onClick={()=>setEditMeet({sportId:sp.id,sessionId:sessId,meet:m})} variant="secondary" small>Edit</Btn>
-            <Btn onClick={()=>deleteMeet(sp.id,sessId,m.id)} variant="danger" small>✕</Btn>
-          </div>
-        </div>
-      );
-    }
-
-    // active session label for stat bar
-    const activeSessionLabel=activeSess?(activeSess.enrolled&&new Date(activeSess.end+"T12:00:00")>=today2?"Active":activeSess.name):sp.sessions.length?"—":"No sessions";
-    const activeSessionName=activeSess?activeSess.name:activeSessionLabel;
-
-    const TABS=[{k:"overview",l:"Overview"},{k:"practices",l:"Practices"},{k:"meets",l:"Meets & games"},{k:"results",l:"Results"},{k:"memberships",l:"Memberships"},{k:"sessions",l:"All sessions"}];
-
     return(
       <div>
-        {/* top bar */}
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
           <button onClick={()=>setSelectedSportId(null)} style={{background:"none",border:"none",cursor:"pointer",color:C.accent,fontSize:13,padding:0}}>‹ Back to activities</button>
           <div style={{display:"flex",gap:8}}>
             {sp.website&&<a href={sp.website} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:sc.txt,background:sc.bg,padding:"5px 12px",borderRadius:7,textDecoration:"none",border:`1px solid ${sc.border}`}}>Site ↗</a>}
@@ -1113,403 +974,74 @@ function ActivitiesPage({sports,setSports,conflicts,setConflicts,summerData,sett
             <Btn onClick={()=>setAddSession({sportId:sp.id})} small>+ Add session</Btn>
           </div>
         </div>
-
-        {/* header card with stat bar */}
-        <div style={{background:C.card,border:`1.5px solid ${sc.border}`,borderRadius:16,marginBottom:16,overflow:"hidden"}}>
-          {/* identity row */}
-          <div style={{display:"flex",alignItems:"flex-start",gap:16,padding:"18px 20px",background:sc.bg}}>
-              <div style={{flex:1}}>
-              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:5,flexWrap:"wrap"}}>
-                <div style={{fontSize:22,fontWeight:700,color:sc.txt}}>{sp.name}</div>
-                {kid&&<KidPill kid={kid}/>}
-                {activeSess&&new Date(activeSess.end+"T12:00:00")>=today2&&activeSess.enrolled&&<span style={{fontSize:11,background:"#052E16",color:"#4ADE80",padding:"2px 8px",borderRadius:20,fontWeight:600}}>Active</span>}
-              </div>
-              {sp.teamName&&<div style={{fontSize:13,color:"#94A3B8",marginBottom:2}}>{sp.teamName}</div>}
-              {sp.location&&<div style={{fontSize:12,color:"#64748B"}}>{sp.location}{sp.phone?` · ${sp.phone}`:""}</div>}
-              {sp.coach&&<div style={{fontSize:12,color:"#64748B",marginTop:1}}>Coach: {sp.coach}</div>}
-              {sp.notes&&<div style={{fontSize:11,color:"#4A5568",marginTop:5,fontStyle:"italic"}}>{sp.notes}</div>}
+        <div style={{background:sc.bg,border:`1.5px solid ${sc.border}`,borderRadius:16,padding:"20px 22px",marginBottom:20,display:"flex",alignItems:"flex-start",gap:18}}>
+          <div style={{fontSize:48}}>{icon2}</div>
+          <div style={{flex:1}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
+              <div style={{fontSize:22,fontWeight:700,color:sc.txt}}>{sp.name}</div>
+              {kid&&<KidPill kid={kid}/>}
+              {sp.sessions.some(s=>s.enrolled)&&<span style={{fontSize:11,background:"#052E16",color:"#4ADE80",padding:"2px 8px",borderRadius:20,fontWeight:600}}>Active</span>}
             </div>
-          </div>
-          {/* stat bar */}
-          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",borderTop:`1px solid ${sc.border}`}}>
-            {[
-              {label:"Current session",val:activeSessionName,tab:"overview"},
-              {label:"Practice days",val:activeSess&&activeSess.practiceDays.length?activeSess.practiceDays.join(" & "):"—",tab:"practices"},
-              {label:"Upcoming meets",val:upcomingMeets.length,valColor:upcomingMeets.length>0?"#4ADE80":C.text2,tab:"meets"},
-              {label:"Session ends",val:activeSess&&activeSess.end?new Date(activeSess.end+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"}):"—",tab:"sessions"},
-            ].map((s,i)=>(
-              <div key={i} onClick={()=>setDetailTab(s.tab)} style={{padding:"11px 14px",borderRight:i<3?`1px solid ${sc.border}`:"none",cursor:"pointer",background:detailTab===s.tab?sc.bg:"transparent",transition:"background 0.12s"}}>
-                <div style={{fontSize:14,fontWeight:600,color:s.valColor||sc.txt,marginBottom:3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.val}</div>
-                <div style={{fontSize:10,color:C.text3,textTransform:"uppercase",letterSpacing:"0.05em"}}>{s.label}</div>
-              </div>
-            ))}
+            <div style={{fontSize:14,color:"#94A3B8",marginBottom:4}}>{sp.teamName}</div>
+            {sp.location&&<div style={{fontSize:13,color:"#64748B"}}>{sp.location}{sp.phone?` · ${sp.phone}`:""}</div>}
+            {sp.coach&&<div style={{fontSize:13,color:"#64748B",marginTop:2}}>Coach: {sp.coach}</div>}
+            {sp.notes&&<div style={{fontSize:12,color:"#4A5568",marginTop:6,fontStyle:"italic"}}>{sp.notes}</div>}
           </div>
         </div>
-
-        {/* tabs */}
-        <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,marginBottom:18,overflowX:"auto"}}>
-          {TABS.map(t=>(
-            <button key={t.k} onClick={()=>setDetailTab(t.k)} style={{padding:"9px 16px",background:"none",border:"none",borderBottom:`2px solid ${detailTab===t.k?sc.txt:"transparent"}`,color:detailTab===t.k?sc.txt:C.text2,cursor:"pointer",fontSize:13,fontWeight:detailTab===t.k?600:400,whiteSpace:"nowrap",marginBottom:-1}}>
-              {t.l}
-            </button>
-          ))}
+        <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:12}}>Sessions</div>
+        {sp.sessions.length===0&&<div style={{textAlign:"center",padding:"30px",color:C.text3,fontSize:13,background:C.card,borderRadius:12,border:`1px solid ${C.border}`,marginBottom:16}}>No sessions yet.</div>}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:12,marginBottom:24}}>
+          {sp.sessions.map(sess=>{
+            const endDate=sess.end?new Date(sess.end+"T12:00:00"):null;
+            const isPast=endDate&&endDate<today2;
+            const isActive=sess.enrolled&&!isPast;
+            return(
+              <div key={sess.id} style={{background:isActive?sc.bg:C.card2,border:`1.5px solid ${isActive?sc.border:C.border}`,borderRadius:12,padding:16,opacity:isPast?0.5:1,position:"relative"}}>
+                <div style={{position:"absolute",top:12,right:12,fontSize:10,background:isActive?"#052E16":isPast?"#1F2937":"#2D2005",color:isActive?"#4ADE80":isPast?"#6B7280":"#FCD34D",padding:"2px 8px",borderRadius:20,fontWeight:600}}>{isActive?"Active":isPast?"Past":"Reference"}</div>
+                <div style={{fontWeight:700,fontSize:14,color:isActive?sc.txt:C.text,marginBottom:6,paddingRight:60}}>{sess.name}</div>
+                <div style={{fontSize:12,color:isActive?"#94A3B8":C.text3,marginBottom:4}}>{sess.start} → {sess.end}</div>
+                {sess.practiceDays.length>0&&<div style={{fontSize:12,color:isActive?"#94A3B8":C.text3,marginBottom:2}}>{sess.practiceDays.join(", ")} at {sess.practiceTime}</div>}
+                {sess.practiceLocation&&<div style={{fontSize:11,color:"#4A5568",marginBottom:4}}>{sess.practiceLocation}</div>}
+                {sess.cost&&<div style={{fontSize:13,fontWeight:600,color:isActive?sc.txt:C.text2,marginBottom:8}}>{fmtMoney(sess.cost)}</div>}
+                <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:sess.meets.length?10:0}}>
+                  <span style={{fontSize:11,color:isActive?sc.txt:C.text3}}>{sess.meets.length} meet{sess.meets.length!==1?"s":""}</span>
+                  <div style={{flex:1}}/>
+                  <Btn onClick={()=>setEditSession({sportId:sp.id,session:sess})} variant="secondary" small>Edit</Btn>
+                  <Btn onClick={()=>deleteSession(sp.id,sess.id)} variant="danger" small>✕</Btn>
+                </div>
+                {sess.meets.map(m=>{
+                  const conf=conflicts.find(c=>c.kidKey===sp.kidKey&&c.date===(m.dateStart||m.date));
+                  const notAtt=conf&&conf.chosen&&conf.chosen!==m.id;
+                  const isMulti=m.dateEnd&&m.dateEnd!==m.dateStart;
+                  const mDate=m.dateStart||m.date;
+                  const mPast=mDate&&new Date(mDate+"T12:00:00")<today2;
+                  return(
+                    <div key={m.id} style={{background:mPast?C.card3:C.card,borderRadius:8,padding:"8px 10px",marginBottom:4,border:`1px solid ${mPast?C.border:sc.border}`,opacity:notAtt?0.5:mPast?0.65:1}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                        <div>
+                          <div style={{fontSize:12,fontWeight:600,color:mPast?C.text2:C.text}}>{notAtt?"✗":mPast?"✓":"★"} {m.name}{isMulti?" (multi-day)":""}</div>
+                          <div style={{fontSize:11,color:C.text3}}>{isMulti?`${fmtDate(m.dateStart)} – ${fmtDate(m.dateEnd)}`:fmtDate(mDate)}{m.time?` · ${m.time}`:""}</div>
+                          {m.location&&<div style={{fontSize:11,color:C.text3}}>{m.location}</div>}
+                          {m.results.length>0&&<div style={{marginTop:4,display:"flex",gap:4,flexWrap:"wrap"}}>{m.results.map((r,ri)=><span key={ri} style={{fontSize:10,background:"#0C2340",color:"#38BDF8",padding:"1px 6px",borderRadius:4}}>{r.event}: {r.time} · {r.place}</span>)}</div>}
+                        </div>
+                        <div style={{display:"flex",gap:4,flexShrink:0,marginLeft:6}}>
+                          <Btn onClick={()=>setEditMeet({sportId:sp.id,sessionId:sess.id,meet:m})} variant="secondary" small>Edit</Btn>
+                          <Btn onClick={()=>deleteMeet(sp.id,sess.id,m.id)} variant="danger" small>✕</Btn>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                <button onClick={()=>setAddMeet({sportId:sp.id,sessionId:sess.id,kidKey:sp.kidKey})} style={{width:"100%",marginTop:6,padding:"5px",borderRadius:6,border:`1px dashed ${C.border}`,background:"transparent",cursor:"pointer",fontSize:11,color:C.text3}}>+ Add meet</button>
+              </div>
+            );
+          })}
         </div>
-
-        {/* ── Overview tab ── */}
-        {detailTab==="overview"&&(
-          <div>
-            {/* next up */}
-            <div style={{fontSize:11,fontWeight:600,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10}}>Next up</div>
-            {(()=>{
-              // build merged upcoming list: next 5 practices + upcoming meets, sorted by date
-              const upPracs=activeSess?nextPracticeDates(activeSess,5).map(p=>({
-                _type:"practice",_date:p.date,dayName:p.dayName,time:p.time,timeEnd:p.timeEnd,location:p.location||activeSess.practiceLocation||sp.location||""
-              })):[];
-              const upMeets=upcomingMeets.slice(0,5).map(m=>({_type:"meet",_date:new Date((m.dateStart||m.date)+"T12:00:00"),...m}));
-              const merged=[...upPracs,...upMeets].sort((a,b)=>a._date-b._date).slice(0,6);
-              if(merged.length===0)return <div style={{textAlign:"center",padding:"20px",color:C.text3,fontSize:13,background:C.card,borderRadius:12,border:`1px solid ${C.border}`,marginBottom:12}}>Nothing coming up — add a meet or check practice days.</div>;
-              return merged.map((item,idx)=>{
-                const diff=Math.round((item._date-today2)/(1000*60*60*24));
-                const lbl=diff===0?"Today":diff===1?"Tomorrow":`In ${diff} days`;
-                if(item._type==="practice") return(
-                  <div key={idx} style={{background:sc.bg,border:`1px solid ${sc.border}`,borderRadius:12,padding:"14px 16px",marginBottom:8}}>
-                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
-                      <span style={{fontSize:11,background:"rgba(0,0,0,0.3)",color:sc.txt,padding:"2px 9px",borderRadius:20}}>Practice</span>
-                      <span style={{fontSize:11,background:"#052E16",color:"#4ADE80",padding:"2px 9px",borderRadius:20}}>{lbl}</span>
-                    </div>
-                    <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:2}}>{item._date.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}</div>
-                    <div style={{fontSize:12,color:C.text2}}>{item.time}{item.timeEnd?` – ${item.timeEnd}`:""}{item.location?` · ${item.location}`:""}</div>
-                  </div>
-                );
-                return(
-                  <div key={idx} style={{background:"#1A120A",border:`1px solid #78350F`,borderRadius:12,padding:"14px 16px",marginBottom:8}}>
-                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
-                      <span style={{fontSize:11,background:"rgba(0,0,0,0.3)",color:"#FB923C",padding:"2px 9px",borderRadius:20}}>Meet</span>
-                      <span style={{fontSize:11,background:"#052E16",color:"#4ADE80",padding:"2px 9px",borderRadius:20}}>{lbl}</span>
-                    </div>
-                    <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:2}}>{item.name}</div>
-                    <div style={{fontSize:12,color:C.text2}}>{fmtDate(item.dateStart||item.date)}{item.time?` · ${item.time}`:""}{item.location?` · ${item.location}`:""}</div>
-                  </div>
-                );
-              });
-            })()}
-
-            {/* practice schedule summary */}
-            {activeSess&&activeSess.practiceDays.length>0&&(
-              <>
-                <div style={{fontSize:11,fontWeight:600,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",margin:"18px 0 10px"}}>Practice schedule · {activeSess.name}</div>
-                <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 16px",marginBottom:4}}>
-                  {activeSess.practiceDays.map(d=>{
-                    const det=(activeSess.practiceDayDetails||[]).find(x=>x.day===d);
-                    const t=det?det.time:activeSess.practiceTime;
-                    const te=det?det.timeEnd:"";
-                    const loc=det?det.location:activeSess.practiceLocation||sp.location||"";
-                    return(
-                      <div key={d} style={{display:"flex",alignItems:"center",gap:10,background:sc.bg,border:`1px solid ${sc.border}`,borderRadius:8,padding:"7px 12px",marginBottom:5}}>
-                        <span style={{fontWeight:600,fontSize:12,color:sc.txt,width:32,flexShrink:0}}>{d}</span>
-                        <span style={{fontSize:12,color:C.text}}>{t}{te?` – ${te}`:""}</span>
-                        {loc&&<span style={{fontSize:11,color:C.text3,marginLeft:4}}>· {loc}</span>}
-                      </div>
-                    );
-                  })}
-                  {activeSess.practiceNotes&&<div style={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 12px",marginTop:4,fontSize:12,color:C.text2,fontStyle:"italic"}}>📝 {activeSess.practiceNotes}</div>}
-                  <div style={{fontSize:11,color:C.text3,marginTop:6}}>{fmtDate(activeSess.start)} – {fmtDate(activeSess.end)}</div>
-                </div>
-              </>
-            )}
-
-            {/* all meets this session */}
-            {activeSess&&(
-              <>
-                <div style={{fontSize:11,fontWeight:600,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",margin:"18px 0 10px"}}>All meets · {activeSess.name}</div>
-                <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"4px 16px",marginBottom:4}}>
-                  {activeSess.meets.length===0&&<div style={{padding:"14px 0",textAlign:"center",color:C.text3,fontSize:13}}>No meets added yet.</div>}
-                  {[...activeSess.meets].sort((a,b)=>new Date((b.dateStart||b.date)+"T12:00:00")-new Date((a.dateStart||a.date)+"T12:00:00")).map(m=>{
-                    const isPast=new Date((m.dateStart||m.date)+"T12:00:00")<today2;
-                    return renderMeetRow(m,activeSess.id,null,isPast);
-                  })}
-                  <div style={{borderTop:`1px dashed ${C.border}`,padding:"10px 0"}}>
-                    <button onClick={()=>setAddMeet({sportId:sp.id,sessionId:activeSess.id,kidKey:sp.kidKey})} style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:C.text3,padding:0}}>+ Add meet to {activeSess.name}</button>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-        )}
-
-        {/* ── Practices tab ── */}
-        {detailTab==="practices"&&(
-          <div>
-            {sp.sessions.length===0&&<div style={{textAlign:"center",padding:"30px",color:C.text3,fontSize:13,background:C.card,borderRadius:12,border:`1px solid ${C.border}`}}>No sessions yet. Add a session to track practices.</div>}
-            {sp.sessions.map(sess=>{
-              const endDate=sess.end?new Date(sess.end+"T12:00:00"):null;
-              const isPastSess=endDate&&endDate<today2;
-              const isActiveSess=sess.enrolled&&!isPastSess;
-              const np=isActiveSess?nextPracticeDate(sess):null;
-              const nd=np?Math.round((np-today2)/(1000*60*60*24)):null;
-              return(
-                <div key={sess.id} style={{background:C.card,border:`1px solid ${isActiveSess?sc.border:C.border}`,borderRadius:12,padding:"16px 18px",marginBottom:12,opacity:isPastSess?0.6:1}}>
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-                    <div style={{display:"flex",alignItems:"center",gap:8}}>
-                      <span style={{fontSize:14,fontWeight:600,color:isActiveSess?sc.txt:C.text}}>{sess.name}</span>
-                      <span style={{fontSize:10,background:isActiveSess?"#052E16":isPastSess?"#1F2937":"#2D2005",color:isActiveSess?"#4ADE80":isPastSess?"#6B7280":"#FCD34D",padding:"2px 8px",borderRadius:20}}>{isActiveSess?"Active":isPastSess?"Past":"Reference"}</span>
-                    </div>
-                    <div style={{display:"flex",gap:6}}>
-                      <Btn onClick={()=>setEditSession({sportId:sp.id,session:sess})} variant="secondary" small>Edit</Btn>
-                      <Btn onClick={()=>deleteSession(sp.id,sess.id)} variant="danger" small>✕</Btn>
-                    </div>
-                  </div>
-                  <div style={{fontSize:12,color:C.text2,marginBottom:10}}>{fmtDate(sess.start)} – {fmtDate(sess.end)}{sess.cost?` · ${fmtMoney(sess.cost)}`:""}</div>
-                  {sess.practiceDays.length>0?(
-                    <>
-                      {/* per-day detail rows */}
-                      {sess.practiceDays.map(d=>{
-                        const det=(sess.practiceDayDetails||[]).find(x=>x.day===d);
-                        const t=det?det.time:sess.practiceTime;
-                        const te=det?det.timeEnd:"";
-                        const loc=det?det.location:sess.practiceLocation;
-                        return(
-                          <div key={d} style={{display:"flex",alignItems:"center",gap:10,background:isActiveSess?sc.bg:C.card2,border:`1px solid ${isActiveSess?sc.border:C.border}`,borderRadius:8,padding:"7px 12px",marginBottom:5}}>
-                            <span style={{fontWeight:600,fontSize:12,color:isActiveSess?sc.txt:C.text2,width:32,flexShrink:0}}>{d}</span>
-                            <span style={{fontSize:12,color:C.text}}>{t}{te?` – ${te}`:""}</span>
-                            {loc&&<span style={{fontSize:11,color:C.text3,marginLeft:4}}>· {loc}</span>}
-                          </div>
-                        );
-                      })}
-                      {sess.practiceNotes&&<div style={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 12px",marginTop:4,fontSize:12,color:C.text2,fontStyle:"italic"}}>📝 {sess.practiceNotes}</div>}
-                      {np&&<div style={{marginTop:8}}><span style={{fontSize:11,background:"#052E16",color:"#4ADE80",padding:"2px 10px",borderRadius:20}}>Next: {np.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"})}{nd===0?" — Today":nd===1?" — Tomorrow":""}</span></div>}
-                    </>
-                  ):(
-                    <div style={{fontSize:12,color:C.text3,fontStyle:"italic"}}>No practice days set.</div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* ── Meets & games tab ── */}
-        {detailTab==="meets"&&(
-          <div>
-            {upcomingMeets.length>0&&(
-              <>
-                <div style={{fontSize:11,fontWeight:600,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10}}>Upcoming</div>
-                <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"4px 16px",marginBottom:16}}>
-                  {upcomingMeets.map(m=>renderMeetRow(m,m.sessId,m.sessName,false))}
-                </div>
-              </>
-            )}
-            {pastMeets.length>0&&(
-              <>
-                <div style={{fontSize:11,fontWeight:600,color:C.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10}}>Past</div>
-                <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"4px 16px",marginBottom:16}}>
-                  {pastMeets.map(m=>renderMeetRow(m,m.sessId,m.sessName,true))}
-                </div>
-              </>
-            )}
-            {allMeets.length===0&&<div style={{textAlign:"center",padding:"30px",color:C.text3,fontSize:13,background:C.card,borderRadius:12,border:`1px solid ${C.border}`,marginBottom:16}}>No meets added yet.</div>}
-            {activeSess&&(
-              <button onClick={()=>setAddMeet({sportId:sp.id,sessionId:activeSess.id,kidKey:sp.kidKey})} style={{width:"100%",padding:"9px",borderRadius:8,border:`1px dashed ${C.border}`,background:"transparent",cursor:"pointer",fontSize:12,color:C.text3}}>+ Add meet to {activeSess.name}</button>
-            )}
-          </div>
-        )}
-
-        {/* ── Results tab ── */}
-        {detailTab==="results"&&(
-          <div>
-            {allResults.length===0&&<div style={{textAlign:"center",padding:"30px",color:C.text3,fontSize:13,background:C.card,borderRadius:12,border:`1px solid ${C.border}`}}>No results recorded yet. Add results when editing a meet.</div>}
-            {allResults.map((m,i)=>{
-              const isMulti=m.dateEnd&&m.dateEnd!==m.dateStart;
-              return(
-                <div key={i} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 16px",marginBottom:10}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
-                    <div>
-                      <div style={{fontWeight:600,fontSize:14,color:C.text,marginBottom:2}}>★ {m.name}</div>
-                      <div style={{fontSize:12,color:C.text2}}>{isMulti?`${fmtDate(m.dateStart)} – ${fmtDate(m.dateEnd)}`:fmtDate(m.dateStart||m.date)}{m.location?` · ${m.location}`:""}</div>
-                      {m.sessName&&<div style={{fontSize:11,color:C.text3,marginTop:2}}>{m.sessName}</div>}
-                    </div>
-                  </div>
-                  <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                    {m.results.map((r,ri)=>(
-                      <div key={ri} style={{background:"#0C2340",border:"1px solid #1E40AF",borderRadius:8,padding:"8px 12px",fontSize:12}}>
-                        <div style={{fontWeight:600,color:"#38BDF8",marginBottom:2}}>{r.event}</div>
-                        <div style={{color:C.text}}>{r.time} · <strong>{r.place}</strong></div>
-                        {r.notes&&<div style={{fontSize:11,color:"#64748B",marginTop:2}}>{r.notes}</div>}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* ── Memberships tab ── */}
-        {detailTab==="memberships"&&(
-          <div>
-            {(sp.memberships||[]).length===0&&<div style={{textAlign:"center",padding:"30px",color:C.text3,fontSize:13,border:`1px dashed ${C.border}`,borderRadius:12,marginBottom:12}}>No memberships added for this activity yet.</div>}
-            {(()=>{
-              const today2b=new Date();
-              return(sp.memberships||[]).map(m=>{
-                const daysLeft=m.expDate?Math.round((new Date(m.expDate+"T12:00:00")-today2b)/(1000*60*60*24)):null;
-                const isExpired=daysLeft!==null&&daysLeft<0;
-                const expiringSoon=daysLeft!==null&&daysLeft<=60&&daysLeft>=0;
-                return(
-                  <div key={m.id} style={{border:`1px solid ${isExpired?C.border:sc.border}`,borderLeft:`3px solid ${isExpired?"#6B7280":sc.txt}`,borderRadius:10,padding:"13px 16px",marginBottom:8,background:C.card,opacity:isExpired?0.65:1}}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
-                      <div>
-                        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3,flexWrap:"wrap"}}>
-                          <span style={{fontSize:14,fontWeight:600,color:isExpired?C.text2:sc.txt}}>{m.name}</span>
-                          {!isExpired&&<span style={{fontSize:10,background:"#052E16",color:"#4ADE80",padding:"2px 8px",borderRadius:20}}>Current</span>}
-                          {isExpired&&<span style={{fontSize:10,background:"#1F2937",color:"#6B7280",padding:"2px 8px",borderRadius:20}}>Expired</span>}
-                          {expiringSoon&&<span style={{fontSize:10,background:"#2D1A05",color:"#FCD34D",padding:"2px 8px",borderRadius:20}}>Expires in {daysLeft} days</span>}
-                        </div>
-                        {m.memberType&&<div style={{fontSize:12,color:C.text2,marginBottom:2}}>{m.memberType}</div>}
-                        <div style={{display:"flex",gap:14,flexWrap:"wrap",fontSize:11,color:C.text3}}>
-                          {m.memberNumber&&<span>Member #: {m.memberNumber}</span>}
-                          {m.validFrom&&<span>Valid {fmtDate(m.validFrom)}</span>}
-                          {m.expDate&&<span>Expires {fmtDate(m.expDate)}</span>}
-                          {m.cost&&<span>· {fmtMoney(Number(m.cost))}</span>}
-                        </div>
-                        {m.orgUrl&&<a href={m.orgUrl} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:C.accent,marginTop:3,display:"block"}}>Portal / renewal ↗</a>}
-                        {m.notes&&<div style={{fontSize:11,color:C.text3,marginTop:4,fontStyle:"italic"}}>{m.notes}</div>}
-                      </div>
-                      <div style={{display:"flex",gap:5,flexShrink:0}}>
-                        <Btn onClick={()=>setEditMembership({...m,sportId:sp.id})} variant="secondary" small>Edit</Btn>
-                        <Btn onClick={()=>deleteMembership(sp.id,m.id)} variant="danger" small>✕</Btn>
-                      </div>
-                    </div>
-                  </div>
-                );
-              });
-            })()}
-            <button onClick={()=>setAddMembershipSportId(sp.id)} style={{width:"100%",padding:"9px",borderRadius:8,border:`1px dashed ${C.border}`,background:"transparent",cursor:"pointer",fontSize:12,color:C.text3,marginTop:4}}>+ Add membership</button>
-          </div>
-        )}
-
-        {/* ── All sessions tab ── */}
-        {detailTab==="sessions"&&(
-          <div>
-            {sp.sessions.length===0&&<div style={{textAlign:"center",padding:"30px",color:C.text3,fontSize:13,background:C.card,borderRadius:12,border:`1px solid ${C.border}`,marginBottom:12}}>No sessions yet.</div>}
-            {sp.sessions.map(sess=>{
-              const endDate=sess.end?new Date(sess.end+"T12:00:00"):null;
-              const isPastSess=endDate&&endDate<today2;
-              const isActiveSess=sess.enrolled&&!isPastSess;
-              const statusLabel=isActiveSess?"Active":isPastSess?"Past":sess.enrolled?"Upcoming":"Reference";
-              const statusColor=isActiveSess?"#4ADE80":isPastSess?"#6B7280":"#FCD34D";
-              const statusBg=isActiveSess?"#052E16":isPastSess?"#1F2937":"#2D2005";
-              return(
-                <div key={sess.id} style={{background:C.card,border:`1px solid ${isActiveSess?sc.border:C.border}`,borderLeft:`4px solid ${isActiveSess?sc.txt:C.border}`,borderRadius:12,padding:"14px 18px",marginBottom:10,display:"flex",alignItems:"center",gap:14,opacity:isPastSess?0.65:1}}>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
-                      <span style={{fontSize:14,fontWeight:600,color:isActiveSess?sc.txt:C.text}}>{sess.name}</span>
-                      <span style={{fontSize:10,background:statusBg,color:statusColor,padding:"2px 8px",borderRadius:20}}>{statusLabel}</span>
-                    </div>
-                    <div style={{fontSize:12,color:C.text2,marginBottom:3}}>{fmtDate(sess.start)} – {fmtDate(sess.end)}</div>
-                    {sess.practiceDays.length>0&&<div style={{fontSize:12,color:C.text3}}>{sess.practiceDays.join(", ")} at {sess.practiceTime}</div>}
-                    {sess.cost&&<div style={{fontSize:12,color:C.text2,marginTop:3}}>{fmtMoney(sess.cost)}</div>}
-                    <div style={{fontSize:11,color:C.text3,marginTop:3}}>{sess.meets.length} meet{sess.meets.length!==1?"s":""}</div>
-                  </div>
-                  <div style={{display:"flex",gap:6,flexShrink:0}}>
-                    <Btn onClick={()=>setEditSession({sportId:sp.id,session:sess})} variant="secondary" small>Edit</Btn>
-                    <Btn onClick={()=>deleteSession(sp.id,sess.id)} variant="danger" small>✕</Btn>
-                  </div>
-                </div>
-              );
-            })}
-            <button onClick={()=>setAddSession({sportId:sp.id})} style={{width:"100%",padding:"10px",borderRadius:10,border:`1px dashed ${C.border}`,background:"transparent",cursor:"pointer",fontSize:12,color:C.text3,marginTop:4}}>+ Add session</button>
-          </div>
-        )}
-
-        {/* ── Memberships page ── */}
-        {sub==="memberships"&&!selectedSportId&&(
-          <div>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-              <div style={{fontSize:13,color:C.text2}}>All memberships across all activities</div>
-              <Btn onClick={()=>setAddMembershipSportId("__select__")} small>+ Add membership</Btn>
-            </div>
-            {sports.length===0&&<div style={{textAlign:"center",padding:"40px",color:C.text3,fontSize:13,border:`1px dashed ${C.border}`,borderRadius:12}}>No activities added yet.</div>}
-            {(()=>{
-              const allMems=sports.flatMap(sp=>(sp.memberships||[]).map(m=>({...m,sportId:sp.id,sportName:sp.name,kidKey:sp.kidKey,sc:getSC(sp.name)})));
-              const today=new Date();
-              const active=allMems.filter(m=>!m.expDate||new Date(m.expDate+"T12:00:00")>=today);
-              const expired=allMems.filter(m=>m.expDate&&new Date(m.expDate+"T12:00:00")<today);
-              function renderMemRow(m,isExpired){
-                const kid=kids.find(k=>k.key===m.kidKey);
-                const daysLeft=m.expDate?Math.round((new Date(m.expDate+"T12:00:00")-today)/(1000*60*60*24)):null;
-                const expiringSoon=daysLeft!==null&&daysLeft<=60&&daysLeft>0;
-                return(
-                  <div key={m.id} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 16px",borderBottom:`1px solid ${C.border}`,opacity:isExpired?0.6:1}}>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3,flexWrap:"wrap"}}>
-                        <span style={{fontSize:13,fontWeight:600,color:C.text}}>{m.name}</span>
-                        {kid&&<KidPill kid={kid} small/>}
-                        <span style={{fontSize:10,background:m.sc.bg,color:m.sc.txt,border:`1px solid ${m.sc.border}`,padding:"1px 7px",borderRadius:4}}>{m.sportName}</span>
-                        {isExpired&&<span style={{fontSize:10,background:"#1F2937",color:"#6B7280",padding:"1px 7px",borderRadius:20}}>Expired</span>}
-                        {!isExpired&&m.expDate&&<span style={{fontSize:10,background:"#052E16",color:"#4ADE80",padding:"1px 7px",borderRadius:20}}>Current</span>}
-                        {expiringSoon&&<span style={{fontSize:10,background:"#2D1A05",color:"#FCD34D",padding:"1px 7px",borderRadius:20}}>Expires in {daysLeft}d</span>}
-                      </div>
-                      <div style={{display:"flex",gap:16,flexWrap:"wrap",fontSize:11,color:C.text3}}>
-                        {m.memberNumber&&<span>#{m.memberNumber}</span>}
-                        {m.memberType&&<span>{m.memberType}</span>}
-                        {m.validFrom&&<span>Valid {fmtDate(m.validFrom)}</span>}
-                        {m.expDate&&<span>– {fmtDate(m.expDate)}</span>}
-                        {m.cost&&<span>· {fmtMoney(Number(m.cost))}</span>}
-                      </div>
-                      {m.orgUrl&&<a href={m.orgUrl} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:C.accent,marginTop:2,display:"block"}}>Portal ↗</a>}
-                      {m.notes&&<div style={{fontSize:11,color:C.text3,marginTop:3,fontStyle:"italic"}}>{m.notes}</div>}
-                    </div>
-                    <div style={{display:"flex",gap:5,flexShrink:0}}>
-                      <Btn onClick={()=>setEditMembership({...m})} variant="secondary" small>Edit</Btn>
-                      <Btn onClick={()=>deleteMembership(m.sportId,m.id)} variant="danger" small>✕</Btn>
-                    </div>
-                  </div>
-                );
-              }
-              return(
-                <div>
-                  {active.length===0&&expired.length===0&&<div style={{textAlign:"center",padding:"40px",color:C.text3,fontSize:13,border:`1px dashed ${C.border}`,borderRadius:12}}>No memberships added yet. Add a membership to track renewals and member numbers.</div>}
-                  {active.length>0&&(
-                    <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden",background:C.card,marginBottom:12}}>
-                      <div style={{padding:"10px 16px",borderBottom:`1px solid ${C.border}`,background:C.card2,fontSize:11,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em",color:C.text3}}>Active · {active.length}</div>
-                      {active.map(m=>renderMemRow(m,false))}
-                    </div>
-                  )}
-                  {expired.length>0&&(
-                    <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden",background:C.card}}>
-                      <div style={{padding:"10px 16px",borderBottom:`1px solid ${C.border}`,background:C.card2,fontSize:11,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em",color:C.text3}}>Expired · {expired.length}</div>
-                      {expired.map(m=>renderMemRow(m,true))}
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-            {/* add membership — sport selector if no sportId chosen yet */}
-            {addMembershipSportId==="__select__"&&(
-              <Modal title="Add membership — select activity" onClose={()=>setAddMembershipSportId(null)}>
-                <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                  {sports.map(sp=>{
-                    const kid=kids.find(k=>k.key===sp.kidKey);
-                    return(
-                      <div key={sp.id} onClick={()=>setAddMembershipSportId(sp.id)} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",border:`1px solid ${C.border}`,borderRadius:8,cursor:"pointer",background:C.card2}}
-                        onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent}
-                        onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
-                        <span style={{fontSize:13,fontWeight:500,flex:1,color:C.text}}>{sp.name}</span>
-                        {kid&&<KidPill kid={kid} small/>}
-                      </div>
-                    );
-                  })}
-                </div>
-              </Modal>
-            )}
-          </div>
-        )}
         {(editSport||addSport)&&<SportModal sport={editSport} sportOptions={sportOptions} onSave={saveSport} onClose={()=>{setAddSport(false);setEditSport(null);}}/>}
         {addSession&&<SessionModal onSave={sess=>saveSession(addSession.sportId,sess)} onClose={()=>setAddSession(null)}/>}
         {editSession&&<SessionModal session={editSession.session} onSave={sess=>saveSession(editSession.sportId,sess)} onClose={()=>setEditSession(null)}/>}
         {addMeet&&<MeetModal kidKey={addMeet.kidKey} onSave={meet=>saveMeet(addMeet.sportId,addMeet.sessionId,meet)} onClose={()=>setAddMeet(null)} kids={kids}/>}
         {editMeet&&<MeetModal meet={editMeet.meet} kidKey={sports.find(s=>s.id===editMeet.sportId)?.kidKey} onSave={meet=>saveMeet(editMeet.sportId,editMeet.sessionId,meet)} onClose={()=>setEditMeet(null)} kids={kids}/>}
-        {(editMembership||( addMembershipSportId&&addMembershipSportId!=="__select__"))&&<MembershipModal membership={editMembership} onSave={m=>saveMembership(editMembership?editMembership.sportId:addMembershipSportId,m)} onClose={()=>{setEditMembership(null);setAddMembershipSportId(null);}}/>}
       </div>
     );
   }
@@ -1548,87 +1080,44 @@ function ActivitiesPage({sports,setSports,conflicts,setConflicts,summerData,sett
       )}
       {sub==="activities"&&!selectedSportId&&(
         <div>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8,alignItems:"center"}}>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
             <span style={{fontSize:12,color:C.text2,alignSelf:"center"}}>Kid:</span>
             {[{key:"all",name:"All"},...kids].map(k=><button key={k.key} onClick={()=>setFilterKid(k.key)} style={{padding:"4px 12px",borderRadius:20,border:`1px solid ${filterKid===k.key?C.accent:C.border}`,background:filterKid===k.key?C.accent:C.card2,color:filterKid===k.key?"#fff":C.text2,fontSize:12,cursor:"pointer"}}>{k.name}</button>)}
           </div>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:18,alignItems:"center"}}>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:18}}>
             <span style={{fontSize:12,color:C.text2,alignSelf:"center"}}>Sport:</span>
             {["all",...uniqueSports].map(s=><button key={s} onClick={()=>setFilterSport(s)} style={{padding:"4px 12px",borderRadius:20,border:`1px solid ${filterSport===s?C.accent:C.border}`,background:filterSport===s?C.accent:C.card2,color:filterSport===s?"#fff":C.text2,fontSize:12,cursor:"pointer"}}>{s==="all"?"All sports":s}</button>)}
           </div>
-          {(()=>{
-            // when All kids selected, group same-sport entries into one row
-            let rows=[];
-            if(filterKid==="all"){
-              const grouped={};
-              filtered.forEach(sp=>{
-                if(!grouped[sp.name])grouped[sp.name]=[];
-                grouped[sp.name].push(sp);
-              });
-              rows=Object.values(grouped);
-            } else {
-              rows=filtered.map(sp=>[sp]);
-            }
-            if(rows.length===0)return <div style={{textAlign:"center",padding:"40px 20px",color:C.text3,fontSize:13}}>No activities match this filter.</div>;
-            return(
-              <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                {rows.map(group=>{
-                  const sp0=group[0];
-                  const sc=getSC(sp0.name);
-                  const isActive=group.some(sp=>sp.sessions.some(s=>s.enrolled));
-                  const totalMeets=group.reduce((n,sp)=>n+sp.sessions.reduce((m,s)=>m+s.meets.length,0),0);
-                  const activeSessName=group.flatMap(sp=>sp.sessions).find(s=>s.enrolled)?.name||"";
-                  return(
-                    <div key={sp0.name+sp0.id} style={{border:`1px solid ${C.border}`,borderLeft:`3px solid ${sc.txt}`,borderRadius:12,overflow:"hidden",background:C.card}}
-                      onMouseEnter={e=>e.currentTarget.style.borderColor=sc.txt}
-                      onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
-                      {/* sport header row */}
-                      <div style={{display:"grid",gridTemplateColumns:"1fr auto",alignItems:"center",gap:12,padding:"14px 16px"}}>
-                        <div>
-                          <div style={{fontSize:15,fontWeight:600,color:sc.txt,marginBottom:2}}>{sp0.name}</div>
-                          <div style={{fontSize:12,color:C.text2}}>{sp0.teamName||sp0.location||"—"}</div>
-                        </div>
-                        <div style={{display:"flex",alignItems:"center",gap:10}}>
-                          {activeSessName&&<span style={{fontSize:11,color:C.text3}}>{activeSessName}</span>}
-                          {isActive&&<span style={{fontSize:10,background:"#052E16",color:"#4ADE80",padding:"2px 8px",borderRadius:20,fontWeight:500}}>Active</span>}
-                          {totalMeets>0&&<span style={{fontSize:11,color:C.text3}}>{totalMeets} meet{totalMeets!==1?"s":""}</span>}
-                        </div>
-                      </div>
-                      {/* kid strip */}
-                      <div style={{display:"flex",borderTop:`1px solid ${C.border}`,flexWrap:"wrap"}}>
-                        {group.map((sp,gi)=>{
-                          const kid=kids.find(k=>k.key===sp.kidKey);
-                          const activeSess=sp.sessions.find(s=>s.enrolled);
-                          const pracDays=activeSess?.practiceDays||[];
-                          const details=activeSess?.practiceDayDetails||[];
-                          // build compact schedule: if all days same time, show "Tue · Thu · 4:00 PM", else just days
-                          const times=[...new Set(details.map(d=>d.time).filter(Boolean))];
-                          const scheduleLabel=pracDays.length>0
-                            ?(times.length===1?`${pracDays.join(" · ")} · ${times[0]}`:pracDays.join(" · "))
-                            :"No schedule set";
-                          return(
-                            <div key={sp.id} onClick={()=>{setSelectedSportId(sp.id);setDetailTab("overview");}}
-                              style={{flex:"1 1 200px",padding:"10px 16px",borderRight:gi<group.length-1?`1px solid ${C.border}`:"none",display:"flex",alignItems:"center",gap:10,cursor:"pointer",minWidth:0}}
-                              onMouseEnter={e=>e.currentTarget.style.background=sc.bg}
-                              onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                              {kid&&<KidPill kid={kid} small/>}
-                              <span style={{fontSize:11,color:C.text2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{scheduleLabel}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
-                <div onClick={()=>setAddSport(true)}
-                  style={{border:`1px dashed ${C.border}`,borderRadius:12,padding:"14px 18px",cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:C.text3,fontSize:13}}
-                  onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent}
-                  onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
-                  <span style={{fontSize:20}}>＋</span> Add activity
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:12}}>
+            {filtered.map(sp=>{
+              const sc=getSC(sp.name);const isActive=sp.sessions.some(s=>s.enrolled);
+              const kid=kids.find(k=>k.key===sp.kidKey);
+              const pracDays=sp.sessions.find(s=>s.enrolled)?.practiceDays||[];
+              const totalMeets=sp.sessions.reduce((n,s)=>n+s.meets.length,0);
+              const icon2=SPORT_ICON[sp.name]||"🎯";
+              return(
+                <div key={sp.id} onClick={()=>setSelectedSportId(sp.id)}
+                  style={{background:sc.bg,border:`1.5px solid ${sc.border}`,borderRadius:14,padding:"18px 16px",cursor:"pointer",transition:"transform 0.15s,border-color 0.15s",position:"relative",minHeight:160}}
+                  onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.borderColor=sc.txt;}}
+                  onMouseLeave={e=>{e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.borderColor=sc.border;}}>
+                  {isActive&&<div style={{position:"absolute",top:12,right:12,fontSize:10,background:"#052E16",color:"#4ADE80",padding:"2px 8px",borderRadius:20,fontWeight:600}}>Active</div>}
+                  <div style={{fontSize:32,marginBottom:10}}>{icon2}</div>
+                  <div style={{fontSize:15,fontWeight:700,color:sc.txt,marginBottom:4}}>{sp.name}</div>
+                  <div style={{fontSize:12,color:"#94A3B8",marginBottom:8}}>{sp.teamName||sp.location||"—"}</div>
+                  {kid&&<div style={{marginBottom:8}}><KidPill kid={kid} small/></div>}
+                  <div style={{display:"flex",gap:10,fontSize:11,color:"#64748B"}}>
+                    {pracDays.length>0&&<span>{pracDays.join(" · ")}</span>}
+                    {totalMeets>0&&<span>· {totalMeets} meet{totalMeets>1?"s":""}</span>}
+                  </div>
                 </div>
-              </div>
-            );
-          })()}
+              );
+            })}
+            <div onClick={()=>setAddSport(true)} style={{background:"transparent",border:`1.5px dashed ${C.border}`,borderRadius:14,padding:"18px 16px",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:160,gap:8}} onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
+              <div style={{fontSize:28,color:C.text3}}>＋</div>
+              <div style={{fontSize:13,color:C.text3}}>Add activity</div>
+            </div>
+          </div>
+          {filtered.length===0&&<div style={{textAlign:"center",padding:"40px 20px",color:C.text3,fontSize:13}}>No activities match this filter.</div>}
         </div>
       )}
       {sub==="results"&&(
@@ -1666,46 +1155,7 @@ function ActivitiesPage({sports,setSports,conflicts,setConflicts,summerData,sett
 }
 
 // ── Summer Section ──
-function SummerEditModal({editing,schedule,weeks,providers,onSave,onClose}){
-  const [a,setA]=useState(schedule[editing.kidKey][editing.weekIdx].a);
-  const [note,setNote]=useState(schedule[editing.kidKey][editing.weekIdx].note);
-  const [cost,setCost]=useState(schedule[editing.kidKey][editing.weekIdx].cost);
-  const names=["JCC","Unscheduled",...providers.filter(p=>p.name!=="JCC").map(p=>p.name)];
-  return(
-    <Modal title={`${editing.kid.name} — ${weeks[editing.weekIdx].label}`} onClose={onClose}>
-      <F label="Activity"><Sel value={a} onChange={setA} options={names}/></F>
-      <F label="Notes"><Inp value={note} onChange={setNote}/></F>
-      <F label="Cost"><Inp value={cost} onChange={setCost} placeholder="$650"/></F>
-      <div style={{display:"flex",gap:10,marginTop:10}}>
-        <Btn onClick={onClose} variant="secondary">Cancel</Btn>
-        <Btn onClick={()=>onSave({a,note,cost})}>Save</Btn>
-      </div>
-    </Modal>
-  );
-}
-
-function SummerAddYearModal({years,kids,onSave,onClose}){
-  const [y,setY]=useState(Math.max(...years)+1);
-  const [nw,setNw]=useState(8);
-  function create(){
-    const wks=Array.from({length:nw},(_,i)=>({n:i+1,label:`Week ${i+1}`,dates:`Week ${i+1}`}));
-    const sched={};
-    kids.forEach(k=>{sched[k.key]=Array(nw).fill(null).map(()=>({a:"Unscheduled",note:"",cost:""}));});
-    onSave(y,{schedule:sched,providers:JSON.parse(JSON.stringify(DEF_PROVIDERS)),weeks:wks,notes:""});
-  }
-  return(
-    <Modal title="Add new summer year" onClose={onClose}>
-      <F label="Year"><Inp type="number" value={y} onChange={v=>setY(Number(v))}/></F>
-      <F label="Weeks"><Inp type="number" value={nw} onChange={v=>setNw(Number(v))}/></F>
-      <div style={{display:"flex",gap:10,marginTop:10}}>
-        <Btn onClick={onClose} variant="secondary">Cancel</Btn>
-        <Btn onClick={create}>Create {y}</Btn>
-      </div>
-    </Modal>
-  );
-}
-
-function SummerSection({yearData,years,activeYear,setActiveYear,onYearDataChange,kids,getYearData}){
+function SummerSection({yearData,years,activeYear,setActiveYear,onYearDataChange,kids}){
   const [tab,setTab]=useState("dashboard");
   const [editing,setEditing]=useState(null);
   const [showYearMenu,setShowYearMenu]=useState(false);
@@ -1716,16 +1166,7 @@ function SummerSection({yearData,years,activeYear,setActiveYear,onYearDataChange
   const {schedule,providers,weeks}=cur;
   const isHist=activeYear<new Date().getFullYear();
   function updateCur(patch){onYearDataChange(activeYear,{...cur,...patch});}
-  function saveEntry({a,note,cost},ed,sched){
-    const e=ed||editing;
-    if(!e)return;
-    const s=sched||schedule;
-    const newSchedule={...s,[e.kidKey]:[...s[e.kidKey]].map((entry,i)=>i===e.weekIdx?{a,note,cost}:entry)};
-    // rebuild full year data fresh — don't spread stale cur
-    const freshCur=(getYearData?getYearData(activeYear):yearData[activeYear])||{schedule:DEF_SCHED,providers:DEF_PROVIDERS,weeks:DEF_WEEKS,notes:""};
-    onYearDataChange(activeYear,{...freshCur,schedule:newSchedule});
-    setEditing(null);
-  }
+  function saveEntry({a,note,cost}){updateCur({schedule:{...schedule,[editing.kidKey]:schedule[editing.kidKey].map((e,i)=>i===editing.weekIdx?{a,note,cost}:e)}});setEditing(null);}
   const TABS=[{k:"dashboard",l:"Dashboard"},{k:"kids",l:"By Kid"},{k:"programs",l:"Programs"},{k:"costs",l:"Costs"}];
   return(
     <div>
@@ -1741,25 +1182,23 @@ function SummerSection({yearData,years,activeYear,setActiveYear,onYearDataChange
       </div>
       {isHist&&<div style={{background:"#2D1A05",border:"1px solid #78350F",borderRadius:8,padding:"8px 14px",marginBottom:14,fontSize:12,color:C.warning}}>📚 Viewing {activeYear} — historical record (read-only)</div>}
       {tab==="dashboard"&&(
-        <div style={{display:"flex",flexDirection:"column",height:"calc(100vh - 220px)",minHeight:400}}>
-          <div style={{display:"grid",gridTemplateColumns:"100px repeat(4,1fr)",gap:4,marginBottom:4,flexShrink:0}}>
-            <div/>{kids.map(k=><div key={k.key} style={{textAlign:"center",padding:"8px 4px",background:k.bg,borderRadius:8,border:`1px solid ${k.color}33`}}><div style={{fontSize:13,fontWeight:600,color:k.color}}>{k.name}</div><div style={{fontSize:11,color:C.text3}}>Age {ageAsOf(k.dob,`${activeYear}-06-22`)}</div></div>)}
+        <div>
+          <div style={{display:"grid",gridTemplateColumns:"100px repeat(4,1fr)",gap:4,marginBottom:4}}>
+            <div/>{kids.map(k=><div key={k.key} style={{textAlign:"center",padding:"6px 4px",background:k.bg,borderRadius:8,border:`1px solid ${k.color}33`}}><div style={{fontSize:12,fontWeight:600,color:k.color}}>{k.name}</div><div style={{fontSize:10,color:C.text3}}>Age {ageAsOf(k.dob,`${activeYear}-06-22`)}</div></div>)}
           </div>
-          <div style={{display:"flex",flexDirection:"column",flex:1,gap:4}}>
-            {weeks.map((wk,wi)=>(
-              <div key={wi} style={{display:"grid",gridTemplateColumns:"100px repeat(4,1fr)",gap:4,flex:1,minHeight:0}}>
-                <div style={{background:C.card3,borderRadius:8,padding:"6px 8px",border:`1px solid ${C.border}`,display:"flex",flexDirection:"column",justifyContent:"center"}}><div style={{fontWeight:600,fontSize:12,color:C.text}}>{wk.label}</div><div style={{fontSize:10,color:C.text3}}>{wk.dates}</div></div>
-                {kids.map(k=>{const s=(schedule[k.key]&&schedule[k.key][wi])||{a:"Unscheduled",note:"",cost:""};const c=getTC(s.a);return(
-                  <div key={k.key} onClick={()=>!isHist&&setEditing({kidKey:k.key,weekIdx:wi,kid:k})} style={{background:c.bg,border:`1px solid ${c.border}`,borderRadius:8,padding:"8px 10px",cursor:isHist?"default":"pointer",display:"flex",flexDirection:"column",justifyContent:"center"}} onMouseEnter={e=>{if(!isHist)e.currentTarget.style.opacity="0.75";}} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
-                    <div style={{fontWeight:600,fontSize:12,color:c.txt}}>{s.a}</div>
-                    {s.note&&<div style={{fontSize:11,color:c.txt,opacity:0.8,marginTop:2,lineHeight:1.3}}>{s.note}</div>}
-                    {s.cost&&<div style={{fontSize:11,fontWeight:500,color:c.txt,marginTop:2}}>{s.cost}</div>}
-                  </div>
-                );})}
-              </div>
-            ))}
-          </div>
-          {!isHist&&<div style={{fontSize:11,color:C.text3,marginTop:6,textAlign:"center",flexShrink:0}}>Tap any cell to edit</div>}
+          {weeks.map((wk,wi)=>(
+            <div key={wi} style={{display:"grid",gridTemplateColumns:"100px repeat(4,1fr)",gap:4,marginBottom:4}}>
+              <div style={{background:C.card3,borderRadius:8,padding:"6px 8px",border:`1px solid ${C.border}`}}><div style={{fontWeight:600,fontSize:11,color:C.text}}>{wk.label}</div><div style={{fontSize:10,color:C.text3}}>{wk.dates}</div></div>
+              {kids.map(k=>{const s=(schedule[k.key]&&schedule[k.key][wi])||{a:"Unscheduled",note:"",cost:""};const c=getTC(s.a);return(
+                <div key={k.key} onClick={()=>!isHist&&setEditing({kidKey:k.key,weekIdx:wi,kid:k})} style={{background:c.bg,border:`1px solid ${c.border}`,borderRadius:8,padding:"6px 8px",cursor:isHist?"default":"pointer",minHeight:46}} onMouseEnter={e=>{if(!isHist)e.currentTarget.style.opacity="0.75";}} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
+                  <div style={{fontWeight:600,fontSize:11,color:c.txt}}>{s.a}</div>
+                  {s.note&&<div style={{fontSize:10,color:c.txt,opacity:0.8,marginTop:1,lineHeight:1.3}}>{s.note}</div>}
+                  {s.cost&&<div style={{fontSize:10,fontWeight:500,color:c.txt,marginTop:2}}>{s.cost}</div>}
+                </div>
+              );})}
+            </div>
+          ))}
+          {!isHist&&<div style={{fontSize:11,color:C.text3,marginTop:6,textAlign:"center"}}>Tap any cell to edit</div>}
         </div>
       )}
       {tab==="kids"&&(
@@ -1770,7 +1209,7 @@ function SummerSection({yearData,years,activeYear,setActiveYear,onYearDataChange
               <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}><KidAvatar kid={k}/><div><div style={{fontWeight:600,fontSize:15,color:C.text}}>{k.name}</div><div style={{fontSize:11,color:C.text2}}>Age {ageAsOf(k.dob,`${activeYear}-06-22`)} · summer {activeYear}</div></div></div>
               <div style={{borderRadius:12,overflow:"hidden",border:`1px solid ${C.border}`}}>
                 {weeks.map((wk,wi)=>{const s=(schedule[k.key]&&schedule[k.key][wi])||{a:"Unscheduled",note:"",cost:""};const c=getTC(s.a);return(
-                  <div key={wi} onClick={()=>!isHist&&setEditing({kidKey:k.key,weekIdx:wi,kid:k})} style={{display:"grid",gridTemplateColumns:"100px 2fr 2fr 100px",alignItems:"center",gap:12,padding:"10px 16px",background:wi%2===0?C.card:C.card2,borderBottom:wi<weeks.length-1?`1px solid ${C.border}`:"none",cursor:isHist?"default":"pointer",width:"100%",boxSizing:"border-box"}}>
+                  <div key={wi} onClick={()=>!isHist&&setEditing({kidKey:k.key,weekIdx:wi,kid:k})} style={{display:"grid",gridTemplateColumns:"90px 1fr 1fr auto",alignItems:"center",gap:10,padding:"9px 14px",background:wi%2===0?C.card:C.card2,borderBottom:wi<weeks.length-1?`1px solid ${C.border}`:"none",cursor:isHist?"default":"pointer"}}>
                     <div><div style={{fontWeight:500,fontSize:12,color:C.text}}>{wk.label}</div><div style={{fontSize:10,color:C.text3}}>{wk.dates}</div></div>
                     <span style={{background:c.bg,color:c.txt,border:`1px solid ${c.border}`,borderRadius:5,padding:"2px 8px",fontSize:11,fontWeight:500}}>{s.a}</span>
                     <div style={{fontSize:11,color:C.text2}}>{s.note||"—"}</div>
@@ -1809,8 +1248,8 @@ function SummerSection({yearData,years,activeYear,setActiveYear,onYearDataChange
         </div>
       )}
       {tab==="costs"&&activeYear!==2026&&<div style={{textAlign:"center",padding:"40px 20px",color:C.text3,fontSize:13}}>Add costs via the schedule for {activeYear}.</div>}
-      {editing&&<SummerEditModal editing={editing} schedule={schedule} weeks={weeks} providers={providers} onSave={vals=>saveEntry(vals,editing,schedule)} onClose={()=>setEditing(null)}/>}
-      {addingYear&&<SummerAddYearModal years={years} kids={kids} onSave={(y,data)=>{onYearDataChange(y,data);setAddingYear(false);}} onClose={()=>setAddingYear(false)}/>}
+      {editing&&(()=>{const [a,setA]=useState(schedule[editing.kidKey][editing.weekIdx].a);const [note,setNote]=useState(schedule[editing.kidKey][editing.weekIdx].note);const [cost,setCost]=useState(schedule[editing.kidKey][editing.weekIdx].cost);const names=["JCC","Unscheduled",...providers.filter(p=>p.name!=="JCC").map(p=>p.name)];return <Modal title={`${editing.kid.name} — ${weeks[editing.weekIdx].label}`} onClose={()=>setEditing(null)}><F label="Activity"><Sel value={a} onChange={setA} options={names}/></F><F label="Notes"><Inp value={note} onChange={setNote}/></F><F label="Cost"><Inp value={cost} onChange={setCost} placeholder="$650"/></F><div style={{display:"flex",gap:10,marginTop:10}}><Btn onClick={()=>setEditing(null)} variant="secondary">Cancel</Btn><Btn onClick={()=>saveEntry({a,note,cost})}>Save</Btn></div></Modal>;})()}
+      {addingYear&&(()=>{const [y,setY]=useState(Math.max(...years)+1);const [nw,setNw]=useState(8);return <Modal title="Add new summer year" onClose={()=>setAddingYear(false)}><F label="Year"><Inp type="number" value={y} onChange={v=>setY(Number(v))}/></F><F label="Weeks"><Inp type="number" value={nw} onChange={v=>setNw(Number(v))}/></F><div style={{display:"flex",gap:10,marginTop:10}}><Btn onClick={()=>setAddingYear(false)} variant="secondary">Cancel</Btn><Btn onClick={()=>{const wks=Array.from({length:nw},(_,i)=>({n:i+1,label:`Week ${i+1}`,dates:`Week ${i+1}`}));const sched={};kids.forEach(k=>{sched[k.key]=Array(nw).fill(null).map(()=>({a:"Unscheduled",note:"",cost:""}));});onYearDataChange(y,{schedule:sched,providers:JSON.parse(JSON.stringify(DEF_PROVIDERS)),weeks:wks,notes:""});setAddingYear(false);}}>Create {y}</Btn></div></Modal>;})()}
     </div>
   );
 }
@@ -1853,597 +1292,8 @@ function SettingsModal({settings,onSave,allData,onClose,kids,onSaveKid}){
   );
 }
 
-
-
-function MembershipModal({membership,sport,onSave,onClose}){
-  const blank={id:Date.now()+"",name:"",orgUrl:"",memberNumber:"",memberType:"",validFrom:"",expDate:"",cost:"",notes:""};
-  const [m,setM]=useState(membership||blank);
-  return(
-    <Modal title={membership?"Edit membership":"Add membership"} onClose={onClose} wide>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        <F label="Membership / org name"><Inp value={m.name} onChange={v=>setM({...m,name:v})} placeholder="e.g. USATF Youth Membership"/></F>
-        <F label="Member number"><Inp value={m.memberNumber} onChange={v=>setM({...m,memberNumber:v})} placeholder="e.g. 2050368639"/></F>
-      </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        <F label="Membership type"><Inp value={m.memberType} onChange={v=>setM({...m,memberType:v})} placeholder="e.g. USATF Youth – Individual"/></F>
-        <F label="Cost ($)"><Inp type="number" value={m.cost} onChange={v=>setM({...m,cost:v})}/></F>
-      </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        <F label="Valid from"><Inp type="date" value={m.validFrom} onChange={v=>setM({...m,validFrom:v})}/></F>
-        <F label="Expiry date"><Inp type="date" value={m.expDate} onChange={v=>setM({...m,expDate:v})}/></F>
-      </div>
-      <F label="Website / portal URL"><Inp value={m.orgUrl} onChange={v=>setM({...m,orgUrl:v})} placeholder="https://www.usatf.org"/></F>
-      <F label="Notes"><textarea value={m.notes} onChange={e=>setM({...m,notes:e.target.value})} rows={2} placeholder="Any additional notes..." style={{width:"100%",background:C.card2,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",fontSize:13,color:C.text,resize:"vertical",boxSizing:"border-box",fontFamily:"inherit"}}/></F>
-      <div style={{display:"flex",gap:10,marginTop:10}}><Btn onClick={onClose} variant="secondary">Cancel</Btn><Btn onClick={()=>onSave(m)}>Save membership</Btn></div>
-    </Modal>
-  );
-}
-
-// ── House Page ──
-const HOUSE_FLOORS = [
-  {label:"Basement", rooms:["Laundry room","Bathroom","Maintenance room","Bedroom (basement)","Family room","Hallway"]},
-  {label:"1st floor", rooms:["Mudroom (front of house)","Living room","Office","Dining room","Kitchen","Entry room","Mudroom (back of house)"]},
-  {label:"Greenhouse", rooms:["Greenhouse"]},
-  {label:"2nd floor", rooms:["Master bedroom","Sadie's room","Sunroom (back)","Bathroom","TV room","Office","Shay's room","Stairs"]},
-  {label:"3rd floor", rooms:["Christian's room","Aurora's room","Bathroom","Stairs"]},
-];
-const ALL_ROOMS = HOUSE_FLOORS.flatMap(f=>f.rooms.map(r=>({floor:f.label,room:r,full:`${f.label} · ${r}`})));
-const PROJ_COLORS = ["#378ADD","#E89A3C","#4ADE80","#A78BFA","#F472B6","#38BDF8","#FB923C","#34D399"];
-function projColor(i){return PROJ_COLORS[i%PROJ_COLORS.length];}
-
-// ── Sub-modals (top level to avoid hooks violations) ──
-function ProjectModal({project,onSave,onClose}){
-  const blank={id:Date.now()+"",name:"",status:"active",startDate:"",endDate:"",notes:"",rooms:[],payments:[],accountNote:""};
-  const [p,setP]=useState(project||blank);
-  function togRoom(full){setP({...p,rooms:p.rooms.includes(full)?p.rooms.filter(r=>r!==full):[...p.rooms,full]});}
-  function addPayment(){setP({...p,payments:[...p.payments,{id:Date.now()+"",contractor:"",amount:"",date:"",account:"",note:""}]});}
-  function updPayment(id,field,val){setP({...p,payments:p.payments.map(pay=>pay.id===id?{...pay,[field]:val}:pay)});}
-  function delPayment(id){setP({...p,payments:p.payments.filter(pay=>pay.id!==id)});}
-  const total=p.payments.reduce((s,pay)=>s+Number(pay.amount||0),0);
-  return(
-    <Modal title={project?"Edit project":"New project"} onClose={onClose} wide>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        <F label="Project name"><Inp value={p.name} onChange={v=>setP({...p,name:v})} placeholder="e.g. Kitchen renovation"/></F>
-        <F label="Status">
-          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-            {["planned","active","done"].map(s=><button key={s} onClick={()=>setP({...p,status:s})} style={{padding:"5px 14px",borderRadius:7,border:`1px solid ${p.status===s?C.accent:C.border}`,background:p.status===s?C.accent:C.card2,color:p.status===s?"#fff":C.text2,cursor:"pointer",fontSize:12,textTransform:"capitalize"}}>{s}</button>)}
-          </div>
-        </F>
-      </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        <F label="Start date"><Inp type="date" value={p.startDate} onChange={v=>setP({...p,startDate:v})}/></F>
-        <F label="End date"><Inp type="date" value={p.endDate} onChange={v=>setP({...p,endDate:v})}/></F>
-      </div>
-      <F label="Rooms worked on">
-        <div style={{maxHeight:180,overflowY:"auto",border:`1px solid ${C.border}`,borderRadius:8,padding:8}}>
-          {HOUSE_FLOORS.map(fl=>(
-            <div key={fl.label} style={{marginBottom:8}}>
-              <div style={{fontSize:10,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em",color:C.text3,marginBottom:4,paddingBottom:3,borderBottom:`1px solid ${C.border}`}}>{fl.label}</div>
-              <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-                {fl.rooms.map(r=>{const full=`${fl.label} · ${r}`;const on=p.rooms.includes(full);return(
-                  <button key={r} onClick={()=>togRoom(full)} style={{padding:"2px 9px",borderRadius:5,border:`1px solid ${on?C.accent:C.border}`,background:on?C.accent:C.card2,color:on?"#fff":C.text2,cursor:"pointer",fontSize:11}}>{r}</button>
-                );})}
-              </div>
-            </div>
-          ))}
-        </div>
-      </F>
-      <F label={`Payments — running total: ${fmtMoney(total)}`}>
-        {p.payments.map(pay=>(
-          <div key={pay.id} style={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 12px",marginBottom:6}}>
-            <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr",gap:8,marginBottom:6}}>
-              <F label="Contractor/Vendor"><Inp value={pay.contractor} onChange={v=>updPayment(pay.id,"contractor",v)} placeholder="Company or person"/></F>
-              <F label="Amount ($)"><Inp type="number" value={pay.amount} onChange={v=>updPayment(pay.id,"amount",v)}/></F>
-              <F label="Date"><Inp type="date" value={pay.date} onChange={v=>updPayment(pay.id,"date",v)}/></F>
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:8,alignItems:"flex-end"}}>
-              <F label="Account"><Inp value={pay.account} onChange={v=>updPayment(pay.id,"account",v)} placeholder="Chase ···4821"/></F>
-              <F label="Note"><Inp value={pay.note} onChange={v=>updPayment(pay.id,"note",v)} placeholder="Optional"/></F>
-              <Btn onClick={()=>delPayment(pay.id)} variant="danger" small>✕</Btn>
-            </div>
-          </div>
-        ))}
-        <button onClick={addPayment} style={{width:"100%",padding:"7px",borderRadius:7,border:`1px dashed ${C.border}`,background:"transparent",cursor:"pointer",fontSize:12,color:C.text3,marginTop:2}}>+ Add payment</button>
-      </F>
-      <F label="Notes">
-        <textarea value={p.notes} onChange={e=>setP({...p,notes:e.target.value})} rows={3} placeholder="Project notes, reminders, follow-ups..." style={{width:"100%",background:C.card2,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",fontSize:13,color:C.text,resize:"vertical",boxSizing:"border-box",fontFamily:"inherit"}}/>
-      </F>
-      <div style={{display:"flex",gap:10,marginTop:10}}><Btn onClick={onClose} variant="secondary">Cancel</Btn><Btn onClick={()=>onSave(p)}>Save project</Btn></div>
-    </Modal>
-  );
-}
-
-function ContactModal({contact,onSave,onClose}){
-  const blank={id:Date.now()+"",name:"",company:"",phone:"",email:"",address:"",notes:"",trade:""};
-  const [c,setC]=useState(contact||blank);
-  return(
-    <Modal title={contact?"Edit contact":"Add contact"} onClose={onClose} wide>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        <F label="Name"><Inp value={c.name} onChange={v=>setC({...c,name:v})} placeholder="Full name"/></F>
-        <F label="Company"><Inp value={c.company} onChange={v=>setC({...c,company:v})} placeholder="Company name"/></F>
-      </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        <F label="Phone"><Inp value={c.phone} onChange={v=>setC({...c,phone:v})} placeholder="(203) 555-0100"/></F>
-        <F label="Email"><Inp value={c.email} onChange={v=>setC({...c,email:v})} placeholder="email@example.com"/></F>
-      </div>
-      <F label="Trade / Specialty"><Inp value={c.trade} onChange={v=>setC({...c,trade:v})} placeholder="e.g. Plumber, Electrician, General contractor"/></F>
-      <F label="Address"><AddrInp value={c.address} onChange={v=>setC({...c,address:v})} placeholder="Business address"/></F>
-      <F label="Notes"><textarea value={c.notes} onChange={e=>setC({...c,notes:e.target.value})} rows={2} placeholder="Additional notes..." style={{width:"100%",background:C.card2,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",fontSize:13,color:C.text,resize:"vertical",boxSizing:"border-box",fontFamily:"inherit"}}/></F>
-      <div style={{display:"flex",gap:10,marginTop:10}}><Btn onClick={onClose} variant="secondary">Cancel</Btn><Btn onClick={()=>onSave(c)}>Save contact</Btn></div>
-    </Modal>
-  );
-}
-
-function PurchaseModal({purchase,projects,onSave,onClose}){
-  const blank={id:Date.now()+"",item:"",store:"",amount:"",date:"",room:"",projectId:"",account:"",notes:""};
-  const [p,setP]=useState(purchase||blank);
-  return(
-    <Modal title={purchase?"Edit purchase":"Add purchase"} onClose={onClose} wide>
-      <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:10}}>
-        <F label="Item / Description"><Inp value={p.item} onChange={v=>setP({...p,item:v})} placeholder="What was purchased"/></F>
-        <F label="Amount ($)"><Inp type="number" value={p.amount} onChange={v=>setP({...p,amount:v})}/></F>
-      </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        <F label="Store / Vendor"><Inp value={p.store} onChange={v=>setP({...p,store:v})} placeholder="Home Depot, Wayfair..."/></F>
-        <F label="Date"><Inp type="date" value={p.date} onChange={v=>setP({...p,date:v})}/></F>
-      </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        <F label="Room">
-          <select value={p.room} onChange={e=>setP({...p,room:e.target.value})} style={{width:"100%",padding:"8px 12px",borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,background:C.card2,color:C.text}}>
-            <option value="">Select room...</option>
-            {HOUSE_FLOORS.map(fl=>(<optgroup key={fl.label} label={fl.label}>{fl.rooms.map(r=><option key={r} value={`${fl.label} · ${r}`}>{r}</option>)}</optgroup>))}
-          </select>
-        </F>
-        <F label="Project (optional)">
-          <select value={p.projectId} onChange={e=>setP({...p,projectId:e.target.value})} style={{width:"100%",padding:"8px 12px",borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,background:C.card2,color:C.text}}>
-            <option value="">None</option>
-            {projects.map(pr=><option key={pr.id} value={pr.id}>{pr.name}</option>)}
-          </select>
-        </F>
-      </div>
-      <F label="Account"><Inp value={p.account} onChange={v=>setP({...p,account:v})} placeholder="Chase ···4821"/></F>
-      <F label="Notes"><Inp value={p.notes} onChange={v=>setP({...p,notes:v})} placeholder="Optional notes"/></F>
-      <div style={{display:"flex",gap:10,marginTop:10}}><Btn onClick={onClose} variant="secondary">Cancel</Btn><Btn onClick={()=>onSave(p)}>Save purchase</Btn></div>
-    </Modal>
-  );
-}
-
-function HousePage({data,onChange}){
-  const [tab,setTab]=useState("dashboard");
-  const [editProject,setEditProject]=useState(null);
-  const [addProject,setAddProject]=useState(false);
-  const [editContact,setEditContact]=useState(null);
-  const [addContact,setAddContact]=useState(false);
-  const [editPurchase,setEditPurchase]=useState(null);
-  const [addPurchase,setAddPurchase]=useState(false);
-  const [roomsFloor,setRoomsFloor]=useState(null);
-  const [selectedRoom,setSelectedRoom]=useState(null);
-
-  const {projects=[],contacts=[],purchases=[],receipts=[]}=data;
-
-  function saveProject(p){
-    const exists=projects.find(x=>x.id===p.id);
-    const updated=exists?projects.map(x=>x.id===p.id?p:x):[...projects,p];
-    onChange({...data,projects:updated});
-    setEditProject(null);setAddProject(false);
-  }
-  function deleteProject(id){onChange({...data,projects:projects.filter(p=>p.id!==id)});}
-  function saveContact(c){
-    const exists=contacts.find(x=>x.id===c.id);
-    const updated=exists?contacts.map(x=>x.id===c.id?c:x):[...contacts,c];
-    onChange({...data,contacts:updated});
-    setEditContact(null);setAddContact(false);
-  }
-  function deleteContact(id){onChange({...data,contacts:contacts.filter(c=>c.id!==id)});}
-  function savePurchase(p){
-    const exists=purchases.find(x=>x.id===p.id);
-    const updated=exists?purchases.map(x=>x.id===p.id?p:x):[...purchases,p];
-    onChange({...data,purchases:updated});
-    setEditPurchase(null);setAddPurchase(false);
-  }
-  function deletePurchase(id){onChange({...data,purchases:purchases.filter(p=>p.id!==id)});}
-
-  const totalSpent=projects.reduce((s,p)=>s+p.payments.reduce((ps,pay)=>ps+Number(pay.amount||0),0),0);
-  const activeProjs=projects.filter(p=>p.status==="active");
-  const doneProjs=projects.filter(p=>p.status==="done");
-
-  const TABS=[{k:"dashboard",l:"Dashboard"},{k:"timeline",l:"Timeline"},{k:"projects",l:"Projects"},{k:"rooms",l:"Rooms"},{k:"contacts",l:"Contacts"},{k:"purchases",l:"Purchases"},{k:"receipts",l:"Receipts"}];
-
-  function StatusPill({status}){
-    const map={active:{bg:"#052E16",color:"#4ADE80",label:"Active"},done:{bg:"#1a1a2e",color:"#A78BFA",label:"Done"},planned:{bg:"#1a1206",color:"#FCD34D",label:"Planned"}};
-    const s=map[status]||map.planned;
-    return <span style={{fontSize:10,background:s.bg,color:s.color,padding:"2px 8px",borderRadius:20,fontWeight:500}}>{s.label}</span>;
-  }
-
-  function projTotal(p){return p.payments.reduce((s,pay)=>s+Number(pay.amount||0),0);}
-
-  // ── Dashboard tab ──
-  function renderDashboard(){
-    return(
-      <div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:24}}>
-          {[{val:fmtMoney(totalSpent),lbl:"Total spent"},{val:activeProjs.length,lbl:"Active projects",color:"#4ADE80"},{val:doneProjs.length,lbl:"Completed"},{val:contacts.length,lbl:"Contacts saved"}].map((s,i)=>(
-            <div key={i} style={{background:C.card2,borderRadius:10,padding:"12px 14px",border:`1px solid ${C.border}`}}>
-              <div style={{fontSize:20,fontWeight:600,color:s.color||C.text,marginBottom:2}}>{s.val}</div>
-              <div style={{fontSize:10,color:C.text3,textTransform:"uppercase",letterSpacing:"0.05em"}}>{s.lbl}</div>
-            </div>
-          ))}
-        </div>
-
-        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:24}}>
-          {[
-            {tab:"timeline",icon:"⏱",title:"Timeline",desc:"All projects in chronological order with payments and notes.",color:"#378ADD",preview:projects.slice(0,3).map(p=>({label:p.name,status:p.status}))},
-            {tab:"projects",icon:"🔧",title:"Projects",desc:"Full project detail — payments, contractors, rooms, notes.",color:"#E89A3C",preview:[{label:`${projects.length} total projects`},{label:`${fmtMoney(totalSpent)} total spent`}]},
-            {tab:"rooms",icon:"🏠",title:"Rooms",desc:"Browse by floor. See what work has been done in each area.",color:"#4ADE80",preview:HOUSE_FLOORS.slice(0,3).map(f=>({label:f.label,count:projects.filter(p=>p.rooms.some(r=>r.startsWith(f.label))).length}))},
-          ].map(card=>(
-            <div key={card.tab} onClick={()=>setTab(card.tab)} style={{border:`1px solid ${C.border}`,borderRadius:12,padding:16,cursor:"pointer",background:C.card,borderTop:`3px solid ${card.color}`,transition:"border-color 0.12s"}}
-              onMouseEnter={e=>e.currentTarget.style.borderColor=card.color}
-              onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
-              <div style={{fontSize:22,marginBottom:8}}>{card.icon}</div>
-              <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:4}}>{card.title}</div>
-              <div style={{fontSize:12,color:C.text2,marginBottom:12,lineHeight:1.5}}>{card.desc}</div>
-              <div style={{borderTop:`1px solid ${C.border}`,paddingTop:10}}>
-                {card.preview.map((row,i)=>(
-                  <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:11,color:C.text2,padding:"2px 0"}}>
-                    <span>{row.label}</span>
-                    {row.status&&<StatusPill status={row.status}/>}
-                    {row.count!==undefined&&<span style={{color:C.text3}}>{row.count} project{row.count!==1?"s":""}</span>}
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {activeProjs.length>0&&(
-          <>
-            <div style={{fontSize:11,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em",color:C.text3,marginBottom:10}}>Active right now</div>
-            {activeProjs.map((p,i)=>(
-              <div key={p.id} style={{border:`1px solid ${C.border}`,borderLeft:`3px solid ${projColor(i)}`,borderRadius:10,padding:"12px 16px",marginBottom:8,background:C.card}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:p.notes?6:0}}>
-                  <div>
-                    <div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:2}}>{p.name}</div>
-                    <div style={{fontSize:11,color:C.text2}}>{p.rooms.slice(0,3).join(" · ")}{p.rooms.length>3?` +${p.rooms.length-3} more`:""}</div>
-                  </div>
-                  <span style={{fontSize:13,fontWeight:600,color:projColor(i)}}>{fmtMoney(projTotal(p))}</span>
-                </div>
-                {p.notes&&<div style={{fontSize:11,color:C.text2,background:C.card2,padding:"6px 10px",borderRadius:6,marginTop:6,fontStyle:"italic",lineHeight:1.5}}>{p.notes.slice(0,200)}{p.notes.length>200?"…":""}</div>}
-              </div>
-            ))}
-          </>
-        )}
-
-        <div style={{fontSize:11,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em",color:C.text3,margin:"20px 0 10px"}}>Quick access</div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
-          {[
-            {tab:"contacts",bg:"#0A1F35",color:"#38BDF8",icon:"👥",title:"Contacts",sub:`${contacts.length} contractors & vendors`},
-            {tab:"purchases",bg:"#052E16",color:"#4ADE80",icon:"🛒",title:"Purchases",sub:`${purchases.length} items tracked`},
-            {tab:"receipts",bg:"#2D1A05",color:"#FB923C",icon:"📄",title:"Receipts",sub:`${receipts.length} PDFs stored`},
-          ].map(card=>(
-            <div key={card.tab} onClick={()=>setTab(card.tab)} style={{border:`1px solid ${C.border}`,borderRadius:10,padding:"12px 14px",cursor:"pointer",background:C.card,display:"flex",alignItems:"center",gap:12}}
-              onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent}
-              onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
-              <div style={{width:36,height:36,borderRadius:8,background:card.bg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{card.icon}</div>
-              <div><div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:1}}>{card.title}</div><div style={{fontSize:11,color:C.text2}}>{card.sub}</div></div>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  // ── Timeline tab ──
-  function renderTimeline(){
-    const sorted=[...projects].sort((a,b)=>{
-      const order={active:0,planned:1,done:2};
-      if(order[a.status]!==order[b.status])return order[a.status]-order[b.status];
-      return (b.startDate||"").localeCompare(a.startDate||"");
-    });
-    if(sorted.length===0)return <div style={{textAlign:"center",padding:"40px",color:C.text3,fontSize:13}}>No projects yet. Add your first project.</div>;
-    return(
-      <div>
-        {sorted.map((p,i)=>(
-          <div key={p.id} style={{display:"flex",gap:14,marginBottom:4}}>
-            <div style={{display:"flex",flexDirection:"column",alignItems:"center",width:32,flexShrink:0}}>
-              <div style={{width:10,height:10,borderRadius:"50%",background:projColor(i),marginTop:14,flexShrink:0}}></div>
-              {i<sorted.length-1&&<div style={{width:2,flex:1,background:C.border,margin:"3px 0"}}></div>}
-            </div>
-            <div style={{flex:1,border:`1px solid ${C.border}`,borderLeft:`3px solid ${projColor(i)}`,borderRadius:12,padding:"14px 16px",marginBottom:12,background:C.card}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
-                <div>
-                  <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:3}}>{p.name}</div>
-                  <div style={{fontSize:11,color:C.text2}}>{p.startDate?fmtDate(p.startDate):""}{p.endDate?` – ${fmtDate(p.endDate)}`:p.status==="active"?" – present":""}</div>
-                </div>
-                <div style={{display:"flex",alignItems:"center",gap:10}}>
-                  <span style={{fontSize:13,fontWeight:600,color:projColor(i)}}>{fmtMoney(projTotal(p))}</span>
-                  <StatusPill status={p.status}/>
-                  <Btn onClick={()=>setEditProject(p)} variant="secondary" small>Edit</Btn>
-                </div>
-              </div>
-              {p.rooms.length>0&&<div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:8}}>{p.rooms.map(r=><span key={r} style={{fontSize:10,padding:"1px 8px",borderRadius:4,background:C.card2,border:`1px solid ${C.border}`,color:C.text2}}>{r}</span>)}</div>}
-              {p.payments.length>0&&(
-                <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:p.notes?8:0}}>
-                  {p.payments.map(pay=><span key={pay.id} style={{fontSize:10,padding:"2px 9px",borderRadius:20,background:C.card2,border:`1px solid ${C.border}`,color:C.text2}}>{pay.contractor}{pay.amount?` · ${fmtMoney(Number(pay.amount))}`:""}</span>)}
-                </div>
-              )}
-              {p.notes&&<div style={{fontSize:11,color:C.text2,background:C.card2,padding:"8px 11px",borderRadius:7,fontStyle:"italic",lineHeight:1.6}}>{p.notes}</div>}
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  // ── Projects tab ──
-  function renderProjects(){
-    return(
-      <div>
-        <div style={{display:"flex",justifyContent:"flex-end",marginBottom:14}}>
-          <Btn onClick={()=>setAddProject(true)}>+ New project</Btn>
-        </div>
-        {projects.length===0&&<div style={{textAlign:"center",padding:"40px",color:C.text3,fontSize:13,border:`1px dashed ${C.border}`,borderRadius:12}}>No projects yet.</div>}
-        {projects.map((p,i)=>(
-          <div key={p.id} style={{border:`1px solid ${C.border}`,borderLeft:`3px solid ${projColor(i)}`,borderRadius:12,marginBottom:10,overflow:"hidden",background:C.card}}>
-            <div style={{display:"grid",gridTemplateColumns:"1fr auto",alignItems:"center",gap:12,padding:"14px 16px"}}>
-              <div>
-                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
-                  <span style={{fontSize:14,fontWeight:600,color:C.text}}>{p.name}</span>
-                  <StatusPill status={p.status}/>
-                </div>
-                <div style={{fontSize:11,color:C.text2}}>{p.rooms.slice(0,4).join(" · ")}{p.rooms.length>4?` +${p.rooms.length-4} more`:""}</div>
-              </div>
-              <div style={{display:"flex",alignItems:"center",gap:10}}>
-                <span style={{fontSize:14,fontWeight:600,color:projColor(i)}}>{fmtMoney(projTotal(p))}</span>
-                <Btn onClick={()=>setEditProject(p)} variant="secondary" small>Edit</Btn>
-                <Btn onClick={()=>deleteProject(p.id)} variant="danger" small>✕</Btn>
-              </div>
-            </div>
-            {(p.payments.length>0||p.notes)&&(
-              <div style={{borderTop:`1px solid ${C.border}`,padding:"12px 16px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-                {p.payments.length>0&&(
-                  <div>
-                    <div style={{fontSize:10,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em",color:C.text3,marginBottom:8}}>Payments</div>
-                    {p.payments.map(pay=>(
-                      <div key={pay.id} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"4px 0",borderBottom:`1px solid ${C.border}`}}>
-                        <div><span style={{color:C.text}}>{pay.contractor}</span>{pay.date&&<span style={{color:C.text3,marginLeft:6}}>{fmtDate(pay.date)}</span>}</div>
-                        <div style={{display:"flex",gap:10,alignItems:"center"}}>
-                          {pay.account&&<span style={{fontSize:10,color:C.text3}}>{pay.account}</span>}
-                          <span style={{color:"#4ADE80",fontWeight:500}}>{fmtMoney(Number(pay.amount||0))}</span>
-                        </div>
-                      </div>
-                    ))}
-                    <div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"5px 0",fontWeight:600}}>
-                      <span>Total</span><span style={{color:projColor(i)}}>{fmtMoney(projTotal(p))}</span>
-                    </div>
-                  </div>
-                )}
-                {p.notes&&(
-                  <div>
-                    <div style={{fontSize:10,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em",color:C.text3,marginBottom:8}}>Notes</div>
-                    <div style={{fontSize:12,color:C.text2,lineHeight:1.6,fontStyle:"italic",background:C.card2,padding:"8px 10px",borderRadius:7}}>{p.notes}</div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  // ── Rooms tab ──
-  function renderRooms(){
-    return(
-      <div>
-        {HOUSE_FLOORS.map(fl=>{
-          const isOpen=roomsFloor===fl.label;
-          return(
-            <div key={fl.label} style={{border:`1px solid ${C.border}`,borderRadius:12,marginBottom:10,overflow:"hidden",background:C.card}}>
-              <div onClick={()=>setRoomsFloor(isOpen?null:fl.label)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",cursor:"pointer",background:isOpen?C.card2:C.card}}>
-                <div style={{fontSize:14,fontWeight:600,color:C.text}}>{fl.label}</div>
-                <div style={{display:"flex",alignItems:"center",gap:10}}>
-                  <span style={{fontSize:11,color:C.text3}}>{fl.rooms.length} rooms</span>
-                  <span style={{fontSize:18,color:C.text3,transform:isOpen?"rotate(90deg)":"none",transition:"transform 0.15s"}}>›</span>
-                </div>
-              </div>
-              {isOpen&&(
-                <div style={{borderTop:`1px solid ${C.border}`,padding:12,display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(170px,1fr))",gap:8}}>
-                  {fl.rooms.map(r=>{
-                    const full=`${fl.label} · ${r}`;
-                    const roomProjs=projects.filter(p=>p.rooms.includes(full));
-                    const isSelected=selectedRoom===full;
-                    return(
-                      <div key={r} onClick={()=>setSelectedRoom(isSelected?null:full)}
-                        style={{border:`1px solid ${roomProjs.length>0?C.accent:C.border}`,borderRadius:8,padding:"10px 12px",cursor:"pointer",background:isSelected?C.card2:C.card,transition:"border-color 0.12s"}}
-                        onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent}
-                        onMouseLeave={e=>e.currentTarget.style.borderColor=roomProjs.length>0?C.accent:C.border}>
-                        <div style={{fontSize:12,fontWeight:500,color:C.text,marginBottom:3}}>{r}</div>
-                        <div style={{fontSize:11,color:roomProjs.length>0?C.accent:C.text3}}>{roomProjs.length>0?`${roomProjs.length} project${roomProjs.length>1?"s":""}`:""}</div>
-                        {isSelected&&roomProjs.length>0&&(
-                          <div style={{marginTop:8,borderTop:`1px solid ${C.border}`,paddingTop:8}}>
-                            {roomProjs.map((p,i)=>(
-                              <div key={p.id} style={{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:4}}>
-                                <span style={{color:C.text}}>{p.name}</span>
-                                <StatusPill status={p.status}/>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    );
-  }
-
-  // ── Contacts tab ──
-  function renderContacts(){
-    return(
-      <div>
-        <div style={{display:"flex",justifyContent:"flex-end",marginBottom:14}}>
-          <Btn onClick={()=>setAddContact(true)}>+ Add contact</Btn>
-        </div>
-        {contacts.length===0&&<div style={{textAlign:"center",padding:"40px",color:C.text3,fontSize:13,border:`1px dashed ${C.border}`,borderRadius:12}}>No contacts yet.</div>}
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:10}}>
-          {contacts.map(c=>(
-            <div key={c.id} style={{border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 16px",background:C.card}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
-                <div>
-                  <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:1}}>{c.name||c.company||"Unnamed"}</div>
-                  {c.company&&c.name&&<div style={{fontSize:12,color:C.text2}}>{c.company}</div>}
-                  {c.trade&&<div style={{fontSize:11,color:C.accent,marginTop:2}}>{c.trade}</div>}
-                </div>
-                <div style={{display:"flex",gap:4}}>
-                  <Btn onClick={()=>setEditContact(c)} variant="secondary" small>Edit</Btn>
-                  <Btn onClick={()=>deleteContact(c.id)} variant="danger" small>✕</Btn>
-                </div>
-              </div>
-              {c.phone&&<div style={{fontSize:12,color:C.text2,marginBottom:2}}>📞 {c.phone}</div>}
-              {c.email&&<div style={{fontSize:12,color:C.text2,marginBottom:2}}>✉ {c.email}</div>}
-              {c.address&&<div style={{fontSize:11,color:C.text3,marginBottom:2}}>📍 {c.address}</div>}
-              {c.notes&&<div style={{fontSize:11,color:C.text3,marginTop:6,fontStyle:"italic",borderTop:`1px solid ${C.border}`,paddingTop:6}}>{c.notes}</div>}
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  // ── Purchases tab ──
-  function renderPurchases(){
-    return(
-      <div>
-        <div style={{display:"flex",justifyContent:"flex-end",marginBottom:14}}>
-          <Btn onClick={()=>setAddPurchase(true)}>+ Add purchase</Btn>
-        </div>
-        {purchases.length===0&&<div style={{textAlign:"center",padding:"40px",color:C.text3,fontSize:13,border:`1px dashed ${C.border}`,borderRadius:12}}>No purchases yet.</div>}
-        <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden",background:C.card}}>
-          {purchases.map((p,i)=>{
-            const proj=projects.find(pr=>pr.id===p.projectId);
-            return(
-              <div key={p.id} style={{display:"grid",gridTemplateColumns:"1fr auto auto auto",alignItems:"center",gap:12,padding:"10px 16px",borderBottom:i<purchases.length-1?`1px solid ${C.border}`:"none",background:i%2===0?C.card:C.card2}}>
-                <div>
-                  <div style={{fontSize:13,fontWeight:500,color:C.text,marginBottom:1}}>{p.item}</div>
-                  <div style={{fontSize:11,color:C.text2}}>{p.store}{p.room?` · ${p.room}`:""}{proj?` · ${proj.name}`:""}</div>
-                  {p.account&&<div style={{fontSize:10,color:C.text3}}>{p.account}{p.date?` · ${fmtDate(p.date)}`:""}</div>}
-                </div>
-                <div style={{fontSize:13,fontWeight:600,color:"#4ADE80",whiteSpace:"nowrap"}}>{fmtMoney(Number(p.amount||0))}</div>
-                <Btn onClick={()=>setEditPurchase(p)} variant="secondary" small>Edit</Btn>
-                <Btn onClick={()=>deletePurchase(p.id)} variant="danger" small>✕</Btn>
-              </div>
-            );
-          })}
-          {purchases.length>0&&(
-            <div style={{display:"flex",justifyContent:"space-between",padding:"10px 16px",borderTop:`1px solid ${C.border}`,fontWeight:600,fontSize:13}}>
-              <span>Total</span>
-              <span style={{color:"#4ADE80"}}>{fmtMoney(purchases.reduce((s,p)=>s+Number(p.amount||0),0))}</span>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // ── Receipts tab ──
-  function renderReceipts(){
-    return(
-      <div>
-        <div style={{textAlign:"center",padding:"40px 20px",border:`1px dashed ${C.border}`,borderRadius:12,background:C.card}}>
-          <div style={{fontSize:32,marginBottom:12}}>📄</div>
-          <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:6}}>PDF Receipt Storage</div>
-          <div style={{fontSize:13,color:C.text2,marginBottom:16,maxWidth:400,margin:"0 auto 16px"}}>Upload and store PDF receipts for purchases and projects. Link them to a room or project for easy retrieval.</div>
-          <div style={{fontSize:12,color:C.text3}}>PDF upload support coming — use the Notes field on purchases for receipt references in the meantime.</div>
-        </div>
-      </div>
-    );
-  }
-
-  return(
-    <div>
-      <div style={{display:"flex",gap:0,borderBottom:`1px solid ${C.border}`,marginBottom:20,overflowX:"auto"}}>
-        {TABS.map(t=>(
-          <button key={t.k} onClick={()=>setTab(t.k)} style={{padding:"9px 16px",background:"none",border:"none",borderBottom:`2px solid ${tab===t.k?C.accent:"transparent"}`,color:tab===t.k?C.accent:C.text2,cursor:"pointer",fontSize:13,fontWeight:tab===t.k?600:400,whiteSpace:"nowrap",marginBottom:-1}}>
-            {t.l}
-          </button>
-        ))}
-        {tab!=="dashboard"&&<div style={{flex:1,display:"flex",justifyContent:"flex-end",alignItems:"center",paddingRight:4}}>
-          <Btn onClick={()=>setAddProject(true)} small>+ New project</Btn>
-        </div>}
-      </div>
-
-      {tab==="dashboard"&&renderDashboard()}
-      {tab==="timeline"&&renderTimeline()}
-      {tab==="projects"&&renderProjects()}
-      {tab==="rooms"&&renderRooms()}
-      {tab==="contacts"&&renderContacts()}
-      {tab==="purchases"&&renderPurchases()}
-      {tab==="receipts"&&renderReceipts()}
-
-      {(addProject||editProject)&&<ProjectModal project={editProject} onSave={saveProject} onClose={()=>{setAddProject(false);setEditProject(null);}}/>}
-      {(addContact||editContact)&&<ContactModal contact={editContact} onSave={saveContact} onClose={()=>{setAddContact(false);setEditContact(null);}}/>}
-      {(addPurchase||editPurchase)&&<PurchaseModal purchase={editPurchase} projects={projects} onSave={savePurchase} onClose={()=>{setAddPurchase(false);setEditPurchase(null);}}/>}
-    </div>
-  );
-}
-
-// ── Login Screen ──
-const APP_ID="family";
-const APP_PW="schedule2026";
-function LoginScreen({onLogin}){
-  const [id,setId]=useState("");
-  const [pw,setPw]=useState("");
-  const [err,setErr]=useState("");
-  const [showPw,setShowPw]=useState(false);
-  function attempt(){
-    if(id.trim().toLowerCase()===APP_ID&&pw===APP_PW){onLogin();}
-    else{setErr("Incorrect ID or password. Please try again.");setPw("");}
-  }
-  function onKey(e){if(e.key==="Enter")attempt();}
-  return(
-    <div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
-      <div style={{width:"100%",maxWidth:360,background:C.card,border:`1px solid ${C.border}`,borderRadius:20,padding:"36px 32px",boxShadow:"0 8px 40px rgba(0,0,0,0.4)"}}>
-        <div style={{textAlign:"center",marginBottom:32}}>
-          <div style={{fontSize:36,marginBottom:12}}>🏠</div>
-          <div style={{fontSize:22,fontWeight:700,color:C.text,marginBottom:6}}>Family Scheduler</div>
-          <div style={{fontSize:13,color:C.text3}}>Sign in to continue</div>
-        </div>
-        <div style={{marginBottom:16}}>
-          <div style={{fontSize:12,color:C.text2,marginBottom:6,fontWeight:500}}>User ID</div>
-          <input
-            value={id} onChange={e=>{setId(e.target.value);setErr("");}} onKeyDown={onKey}
-            placeholder="Enter your ID"
-            style={{width:"100%",background:C.card2,border:`1px solid ${err?'#EF4444':C.border}`,borderRadius:10,padding:"10px 14px",fontSize:14,color:C.text,outline:"none",boxSizing:"border-box"}}
-            autoComplete="username"
-          />
-        </div>
-        <div style={{marginBottom:24}}>
-          <div style={{fontSize:12,color:C.text2,marginBottom:6,fontWeight:500}}>Password</div>
-          <div style={{position:"relative"}}>
-            <input
-              value={pw} onChange={e=>{setPw(e.target.value);setErr("");}} onKeyDown={onKey}
-              type={showPw?"text":"password"}
-              placeholder="Enter your password"
-              style={{width:"100%",background:C.card2,border:`1px solid ${err?'#EF4444':C.border}`,borderRadius:10,padding:"10px 40px 10px 14px",fontSize:14,color:C.text,outline:"none",boxSizing:"border-box"}}
-              autoComplete="current-password"
-            />
-            <button onClick={()=>setShowPw(v=>!v)} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:C.text3,fontSize:13,padding:0}}>{showPw?"Hide":"Show"}</button>
-          </div>
-        </div>
-        {err&&<div style={{background:"#2D0A0A",border:"1px solid #7F1D1D",borderRadius:8,padding:"9px 13px",fontSize:12,color:"#FCA5A5",marginBottom:16}}>{err}</div>}
-        <button onClick={attempt} style={{width:"100%",padding:"12px",background:C.accent,border:"none",borderRadius:10,color:"#fff",fontSize:15,fontWeight:600,cursor:"pointer"}}>Sign in</button>
-      </div>
-    </div>
-  );
-}
-
 // ── Root App ──
 function App(){
-  const [authed,setAuthed]=useState(()=>sessionStorage.getItem("fs_auth")==="1");
   const [loading,setLoading]=useState(true);
   const [page,setPage]=useState("home");
   const [subPage,setSubPage]=useState(null);
@@ -2457,43 +1307,15 @@ function App(){
   const [showSettings,setShowSettings]=useState(false);
   const [settings,setSettings]=useState({sportOptions:DEFAULT_SPORT_OPTIONS});
   const [kids,setKids]=useState(KIDS_DEF);
-  const [sportNavTarget,setSportNavTarget]=useState(null);
-  const [houseData,setHouseData]=useState({projects:[],contacts:[],purchases:[],receipts:[]});
 
   useEffect(()=>{
     async function load(){
       try{
-        // always attempt to load each year's data directly, don't depend on sap-years existing
         const yl=await store.get(SK.years);
-        const yearList=yl||[2026];
-        if(yl)setYears(yl);
-        const data={};
-        for(const y of yearList){
-          const r=await store.get(SK.year(y));
-          if(r){
-            // merge saved data with defaults so missing keys don't cause errors
-            data[y]={
-              schedule:r.schedule||DEF_SCHED,
-              providers:r.providers||DEF_PROVIDERS,
-              weeks:r.weeks||DEF_WEEKS,
-              notes:r.notes||""
-            };
-          } else {
-            data[y]={schedule:DEF_SCHED,providers:DEF_PROVIDERS,weeks:DEF_WEEKS,notes:""};
-          }
-        }
-        setYearData(data);
-        // ensure sap-years is always saved so future loads work
-        if(!yl){await store.set(SK.years,yearList);}
-        // bootstrap: if year data wasn't in Supabase yet, save it now so next reload reads from DB
-        for(const y of yearList){
-          const exists=await store.get(SK.year(y));
-          if(!exists){await store.set(SK.year(y),data[y]);}
-        }
+        if(yl){setYears(yl);const data={};for(const y of yl){const r=await store.get(SK.year(y));data[y]=r||{schedule:DEF_SCHED,providers:DEF_PROVIDERS,weeks:DEF_WEEKS,notes:""};} setYearData(data);}
         const acts=await store.get(SK.activities);if(acts)setSports(acts);
         const sett=await store.get(SK.settings);if(sett)setSettings(sett);
         const kds=await store.get(SK.kids);if(kds)setKids(kds);
-        const hd=await store.get(SK.house);if(hd)setHouseData(hd);
       }catch(e){console.error(e);}
       setLoading(false);
     }
@@ -2501,13 +1323,9 @@ function App(){
   },[]);
 
   async function persistYear(y,data){
-    setYearData(prev=>({...prev,[y]:data}));
-    const [yearResult,_]=await Promise.all([
-      store.set(SK.year(y),data),
-      // always re-save years list to ensure it exists in Supabase
-      store.set(SK.years,years.includes(y)?years:[...years,y].sort((a,b)=>a-b))
-    ]);
-    if(!years.includes(y)){const ny=[...years,y].sort((a,b)=>a-b);setYears(ny);}
+    const nd={...yearData,[y]:data};setYearData(nd);
+    await store.set(SK.year(y),data);
+    if(!years.includes(y)){const ny=[...years,y].sort((a,b)=>a-b);setYears(ny);await store.set(SK.years,ny);}
   }
   async function handleSettingsSave(newS,restoreData){
     setSettings(newS);await store.set(SK.settings,newS);
@@ -2522,9 +1340,7 @@ function App(){
     else{setPage(dest);setSubPage(null);setSelectedKidKey(null);if(param)setActivitiesTab(param);}
   }
 
-  const NAV=[{k:"home",label:"Home"},{k:"activities",label:"Activities"},{k:"summer",label:"Summer"},{k:"house",label:"73 Weed Hill"}];
-
-  if(!authed)return <LoginScreen onLogin={()=>{sessionStorage.setItem("fs_auth","1");setAuthed(true);}}/>;
+  const NAV=[{k:"home",icon:"⊞",label:"Home"},{k:"activities",icon:"🎯",label:"Activities"},{k:"summer",icon:"☀️",label:"Summer"}];
 
   if(loading)return(
     <div style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh",flexDirection:"column",gap:12,background:C.bg}}>
@@ -2540,14 +1356,13 @@ function App(){
     "kid-profile":{title:kids.find(k=>k.key===selectedKidKey)?.name||"",sub:"Individual profile"},
     activities:{title:"Activities",sub:"Extracurriculars, meets, and results"},
     summer:{title:"Summer Schedule",sub:"Camp and program schedule by year"},
-    house:{title:"73 Weed Hill Ave",sub:"Home improvement tracker"},
   };
   const currentTitle=subPage?pageTitle[subPage]||(pageTitle[page]||{}):pageTitle[page]||{};
 
   return(
-    <div style={{display:"flex",height:"100vh",overflow:"hidden",background:C.bg}}>
+    <div style={{display:"flex",minHeight:"100vh",background:C.bg}}>
       {/* Sidebar */}
-      <div style={{width:"clamp(160px,15vw,210px)",background:C.card,borderRight:`1px solid ${C.border}`,display:"flex",flexDirection:"column",flexShrink:0,position:"sticky",top:0,height:"100vh",overflowY:"auto"}}>
+      <div style={{width:210,background:C.card,borderRight:`1px solid ${C.border}`,display:"flex",flexDirection:"column",flexShrink:0,position:"sticky",top:0,height:"100vh",overflowY:"auto"}}>
         <div style={{padding:"20px 16px 16px",borderBottom:`1px solid ${C.border}`}}>
           <div style={{fontSize:17,fontWeight:700,color:C.text}}>Zaphire</div>
           <div style={{fontSize:11,color:C.text3,marginTop:1}}>Family Planner</div>
@@ -2555,7 +1370,7 @@ function App(){
         <div style={{padding:"10px 8px",flex:1}}>
           {NAV.map(n=>(
             <button key={n.k} onClick={()=>navigate(n.k)} style={{width:"100%",textAlign:"left",padding:"10px 12px",borderRadius:8,border:"none",background:page===n.k&&!subPage?"#1E1B4B":"transparent",color:page===n.k&&!subPage?C.accent:C.text2,cursor:"pointer",fontSize:14,fontWeight:page===n.k&&!subPage?600:400,display:"flex",alignItems:"center",gap:10,marginBottom:3}}>
-              {n.label}
+              <span style={{fontSize:16}}>{n.icon}</span>{n.label}
             </button>
           ))}
         </div>
@@ -2569,15 +1384,13 @@ function App(){
               </div>
             ))}
           </div>
-          <button onClick={()=>window.location.reload()} style={{width:"100%",padding:"9px 12px",borderRadius:8,border:`1px solid #1E40AF`,background:"transparent",color:"#60A5FA",cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",gap:8,marginBottom:6}}>↺ Refresh app</button>
-          <button onClick={()=>setShowSettings(true)} style={{width:"100%",padding:"9px 12px",borderRadius:8,border:`1px solid ${C.border}`,background:C.card2,color:C.text2,cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",gap:8,marginBottom:6}}>⚙ Settings</button>
-          <button onClick={()=>{sessionStorage.removeItem("fs_auth");setAuthed(false);}} style={{width:"100%",padding:"9px 12px",borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",color:C.text3,cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",gap:8}}>← Sign out</button>
+          <button onClick={()=>setShowSettings(true)} style={{width:"100%",padding:"9px 12px",borderRadius:8,border:`1px solid ${C.border}`,background:C.card2,color:C.text2,cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",gap:8}}>⚙ Settings</button>
         </div>
       </div>
 
       {/* Main */}
-      <div style={{flex:1,overflowY:"auto",height:"100vh",display:"flex",flexDirection:"column"}}>
-        <div style={{maxWidth:"100%",width:"100%",padding:"22px 24px 40px",boxSizing:"border-box",flex:1}}>
+      <div style={{flex:1,overflowY:"auto",maxHeight:"100vh"}}>
+        <div style={{maxWidth:860,margin:"0 auto",padding:"22px 20px 40px"}}>
           {/* Breadcrumb */}
           {(page!=="home"||subPage)&&(
             <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:16,fontSize:13,color:C.text3}}>
@@ -2593,10 +1406,9 @@ function App(){
 
           {page==="home"&&!subPage&&<Dashboard sports={sports} summerData={yearData[activeYear]} conflicts={conflicts} kids={kids} onNavigate={navigate}/>}
           {page==="home"&&subPage==="kids-directory"&&<KidsDirectoryPage kids={kids} sports={sports} onSelectKid={k=>navigate("kid-profile",k)} onBack={()=>navigate("home")}/>}
-          {page==="home"&&subPage==="kid-profile"&&<KidProfilePage kidKey={selectedKidKey} kids={kids} sports={sports} yearData={yearData} years={years} onBack={()=>navigate("kids-dir")} onNavigateToSport={(sportId,sessId)=>{setPage("activities");setSubPage(null);setActivitiesTab("activities");setSportNavTarget({sportId,sessId});}}/>}
-          {page==="activities"&&<ActivitiesPage sports={sports} setSports={setSports} conflicts={conflicts} setConflicts={setConflicts} summerData={yearData[activeYear]} settings={settings} initialTab={activitiesTab} kids={kids} onKidClick={k=>navigate("kid-profile",k)} sportNavTarget={sportNavTarget} onSportNavConsumed={()=>setSportNavTarget(null)}/>}
-          {page==="summer"&&<SummerSection yearData={yearData} years={years} activeYear={activeYear} setActiveYear={setActiveYear} onYearDataChange={persistYear} kids={kids} getYearData={y=>yearData[y]}/>}
-          {page==="house"&&<HousePage data={houseData} onChange={async d=>{setHouseData(d);await store.set(SK.house,d);}}/>}
+          {page==="home"&&subPage==="kid-profile"&&<KidProfilePage kidKey={selectedKidKey} kids={kids} sports={sports} yearData={yearData} years={years} onBack={()=>navigate("kids-dir")}/>}
+          {page==="activities"&&<ActivitiesPage sports={sports} setSports={setSports} conflicts={conflicts} setConflicts={setConflicts} summerData={yearData[activeYear]} settings={settings} initialTab={activitiesTab} kids={kids} onKidClick={k=>navigate("kid-profile",k)}/>}
+          {page==="summer"&&<SummerSection yearData={yearData} years={years} activeYear={activeYear} setActiveYear={setActiveYear} onYearDataChange={persistYear} kids={kids}/>}
         </div>
       </div>
 
