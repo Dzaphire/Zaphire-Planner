@@ -1510,95 +1510,12 @@ function ActivitiesPage({sports,setSports,conflicts,setConflicts,summerData,sett
           </div>
         )}
 
-        {/* ── Memberships page ── */}
-        {sub==="memberships"&&!selectedSportId&&(
-          <div>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-              <div style={{fontSize:13,color:C.text2}}>All memberships across all activities</div>
-              <Btn onClick={()=>setAddMembershipSportId("__select__")} small>+ Add membership</Btn>
-            </div>
-            {sports.length===0&&<div style={{textAlign:"center",padding:"40px",color:C.text3,fontSize:13,border:`1px dashed ${C.border}`,borderRadius:12}}>No activities added yet.</div>}
-            {(()=>{
-              const allMems=sports.flatMap(sp=>(sp.memberships||[]).map(m=>({...m,sportId:sp.id,sportName:sp.name,kidKey:sp.kidKey,sc:getSC(sp.name)})));
-              const today=new Date();
-              const active=allMems.filter(m=>!m.expDate||new Date(m.expDate+"T12:00:00")>=today);
-              const expired=allMems.filter(m=>m.expDate&&new Date(m.expDate+"T12:00:00")<today);
-              function renderMemRow(m,isExpired){
-                const kid=kids.find(k=>k.key===m.kidKey);
-                const daysLeft=m.expDate?Math.round((new Date(m.expDate+"T12:00:00")-today)/(1000*60*60*24)):null;
-                const expiringSoon=daysLeft!==null&&daysLeft<=60&&daysLeft>0;
-                return(
-                  <div key={m.id} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 16px",borderBottom:`1px solid ${C.border}`,opacity:isExpired?0.6:1}}>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3,flexWrap:"wrap"}}>
-                        <span style={{fontSize:13,fontWeight:600,color:C.text}}>{m.name}</span>
-                        {kid&&<KidPill kid={kid} small/>}
-                        <span style={{fontSize:10,background:m.sc.bg,color:m.sc.txt,border:`1px solid ${m.sc.border}`,padding:"1px 7px",borderRadius:4}}>{m.sportName}</span>
-                        {isExpired&&<span style={{fontSize:10,background:"#1F2937",color:"#6B7280",padding:"1px 7px",borderRadius:20}}>Expired</span>}
-                        {!isExpired&&m.expDate&&<span style={{fontSize:10,background:"#052E16",color:"#4ADE80",padding:"1px 7px",borderRadius:20}}>Current</span>}
-                        {expiringSoon&&<span style={{fontSize:10,background:"#2D1A05",color:"#FCD34D",padding:"1px 7px",borderRadius:20}}>Expires in {daysLeft}d</span>}
-                      </div>
-                      <div style={{display:"flex",gap:16,flexWrap:"wrap",fontSize:11,color:C.text3}}>
-                        {m.memberNumber&&<span>#{m.memberNumber}</span>}
-                        {m.memberType&&<span>{m.memberType}</span>}
-                        {m.validFrom&&<span>Valid {fmtDate(m.validFrom)}</span>}
-                        {m.expDate&&<span>– {fmtDate(m.expDate)}</span>}
-                        {m.cost&&<span>· {fmtMoney(Number(m.cost))}</span>}
-                      </div>
-                      {m.orgUrl&&<a href={m.orgUrl} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:C.accent,marginTop:2,display:"block"}}>Portal ↗</a>}
-                      {m.notes&&<div style={{fontSize:11,color:C.text3,marginTop:3,fontStyle:"italic"}}>{m.notes}</div>}
-                    </div>
-                    <div style={{display:"flex",gap:5,flexShrink:0}}>
-                      <Btn onClick={()=>setEditMembership({...m})} variant="secondary" small>Edit</Btn>
-                      <Btn onClick={()=>deleteMembership(m.sportId,m.id)} variant="danger" small>✕</Btn>
-                    </div>
-                  </div>
-                );
-              }
-              return(
-                <div>
-                  {active.length===0&&expired.length===0&&<div style={{textAlign:"center",padding:"40px",color:C.text3,fontSize:13,border:`1px dashed ${C.border}`,borderRadius:12}}>No memberships added yet. Add a membership to track renewals and member numbers.</div>}
-                  {active.length>0&&(
-                    <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden",background:C.card,marginBottom:12}}>
-                      <div style={{padding:"10px 16px",borderBottom:`1px solid ${C.border}`,background:C.card2,fontSize:11,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em",color:C.text3}}>Active · {active.length}</div>
-                      {active.map(m=>renderMemRow(m,false))}
-                    </div>
-                  )}
-                  {expired.length>0&&(
-                    <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden",background:C.card}}>
-                      <div style={{padding:"10px 16px",borderBottom:`1px solid ${C.border}`,background:C.card2,fontSize:11,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em",color:C.text3}}>Expired · {expired.length}</div>
-                      {expired.map(m=>renderMemRow(m,true))}
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-            {/* add membership — sport selector if no sportId chosen yet */}
-            {addMembershipSportId==="__select__"&&(
-              <Modal title="Add membership — select activity" onClose={()=>setAddMembershipSportId(null)}>
-                <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                  {sports.map(sp=>{
-                    const kid=kids.find(k=>k.key===sp.kidKey);
-                    return(
-                      <div key={sp.id} onClick={()=>setAddMembershipSportId(sp.id)} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",border:`1px solid ${C.border}`,borderRadius:8,cursor:"pointer",background:C.card2}}
-                        onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent}
-                        onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
-                        <span style={{fontSize:13,fontWeight:500,flex:1,color:C.text}}>{sp.name}</span>
-                        {kid&&<KidPill kid={kid} small/>}
-                      </div>
-                    );
-                  })}
-                </div>
-              </Modal>
-            )}
-          </div>
-        )}
         {(editSport||addSport)&&<SportModal sport={editSport} sportOptions={sportOptions} onSave={saveSport} onClose={()=>{setAddSport(false);setEditSport(null);}}/>}
         {addSession&&<SessionModal onSave={sess=>saveSession(addSession.sportId,sess)} onClose={()=>setAddSession(null)}/>}
         {editSession&&<SessionModal session={editSession.session} onSave={sess=>saveSession(editSession.sportId,sess)} onClose={()=>setEditSession(null)}/>}
         {addMeet&&<MeetModal kidKey={addMeet.kidKey} onSave={meet=>saveMeet(addMeet.sportId,addMeet.sessionId,meet)} onClose={()=>setAddMeet(null)} kids={kids}/>}
         {editMeet&&<MeetModal meet={editMeet.meet} kidKey={sports.find(s=>s.id===editMeet.sportId)?.kidKey} onSave={meet=>saveMeet(editMeet.sportId,editMeet.sessionId,meet)} onClose={()=>setEditMeet(null)} kids={kids}/>}
-        {(editMembership||( addMembershipSportId&&addMembershipSportId!=="__select__"))&&<MembershipModal membership={editMembership} onSave={m=>saveMembership(editMembership?editMembership.sportId:addMembershipSportId,m)} onClose={()=>{setEditMembership(null);setAddMembershipSportId(null);}}/>}
+        {(editMembership||(addMembershipSportId&&addMembershipSportId!=="__select__"))&&<MembershipModal membership={editMembership} onSave={m=>saveMembership(editMembership?editMembership.sportId:addMembershipSportId,m)} onClose={()=>{setEditMembership(null);setAddMembershipSportId(null);}}/>}
       </div>
     );
   }
@@ -1745,6 +1662,98 @@ function ActivitiesPage({sports,setSports,conflicts,setConflicts,summerData,sett
         </div>
       )}
       {sub==="finances"&&<FinancesView/>}
+
+      {/* ── Memberships page ── */}
+      {sub==="memberships"&&(
+        <div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+            <div style={{fontSize:13,color:C.text2}}>All memberships across all activities</div>
+            <Btn onClick={()=>setAddMembershipSportId("__select__")}>+ Add membership</Btn>
+          </div>
+          {sports.length===0&&<div style={{textAlign:"center",padding:"40px",color:C.text3,fontSize:13,border:`1px dashed ${C.border}`,borderRadius:12}}>No activities added yet. Add activities first.</div>}
+          {sports.length>0&&(()=>{
+            const today=new Date();
+            const allMems=sports.flatMap(sp=>(sp.memberships||[]).map(m=>({...m,sportId:sp.id,sportName:sp.name,kidKey:sp.kidKey,sc:getSC(sp.name)})));
+            const active=allMems.filter(m=>!m.expDate||new Date(m.expDate+"T12:00:00")>=today);
+            const expired=allMems.filter(m=>m.expDate&&new Date(m.expDate+"T12:00:00")<today);
+            function renderMemRow(m,isExpired){
+              const kid=kids.find(k=>k.key===m.kidKey);
+              const daysLeft=m.expDate?Math.round((new Date(m.expDate+"T12:00:00")-today)/(1000*60*60*24)):null;
+              const expiringSoon=daysLeft!==null&&daysLeft<=60&&daysLeft>0;
+              return(
+                <div key={m.id} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"13px 16px",borderBottom:`1px solid ${C.border}`,opacity:isExpired?0.6:1}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}}>
+                      <span style={{fontSize:13,fontWeight:600,color:C.text}}>{m.name}</span>
+                      {kid&&<KidPill kid={kid} small/>}
+                      <span style={{fontSize:10,background:m.sc.bg,color:m.sc.txt,border:`1px solid ${m.sc.border}`,padding:"1px 7px",borderRadius:4}}>{m.sportName}</span>
+                      {isExpired&&<span style={{fontSize:10,background:"#1F2937",color:"#6B7280",padding:"1px 7px",borderRadius:20}}>Expired</span>}
+                      {!isExpired&&m.expDate&&<span style={{fontSize:10,background:"#052E16",color:"#4ADE80",padding:"1px 7px",borderRadius:20}}>Current</span>}
+                      {expiringSoon&&<span style={{fontSize:10,background:"#2D1A05",color:"#FCD34D",padding:"1px 7px",borderRadius:20}}>Expires in {daysLeft}d</span>}
+                    </div>
+                    <div style={{display:"flex",gap:16,flexWrap:"wrap",fontSize:11,color:C.text3}}>
+                      {m.memberNumber&&<span>#{m.memberNumber}</span>}
+                      {m.memberType&&<span>{m.memberType}</span>}
+                      {m.validFrom&&<span>Valid {fmtDate(m.validFrom)}</span>}
+                      {m.expDate&&<span>– {fmtDate(m.expDate)}</span>}
+                      {m.cost&&<span>· {fmtMoney(Number(m.cost))}</span>}
+                    </div>
+                    {m.orgUrl&&<a href={m.orgUrl} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:C.accent,marginTop:3,display:"block"}}>Portal ↗</a>}
+                    {m.notes&&<div style={{fontSize:11,color:C.text3,marginTop:3,fontStyle:"italic"}}>{m.notes}</div>}
+                  </div>
+                  <div style={{display:"flex",gap:5,flexShrink:0}}>
+                    <Btn onClick={()=>setEditMembership({...m})} variant="secondary" small>Edit</Btn>
+                    <Btn onClick={()=>deleteMembership(m.sportId,m.id)} variant="danger" small>✕</Btn>
+                  </div>
+                </div>
+              );
+            }
+            return(
+              <div>
+                {allMems.length===0&&(
+                  <div style={{textAlign:"center",padding:"50px 20px",border:`1px dashed ${C.border}`,borderRadius:12,color:C.text3,fontSize:13}}>
+                    No memberships added yet.<br/>
+                    <span style={{fontSize:12}}>You can add memberships here or from the Memberships tab inside each activity.</span>
+                  </div>
+                )}
+                {active.length>0&&(
+                  <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden",background:C.card,marginBottom:12}}>
+                    <div style={{padding:"10px 16px",borderBottom:`1px solid ${C.border}`,background:C.card2,fontSize:11,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em",color:C.text3}}>Current · {active.length}</div>
+                    {active.map(m=>renderMemRow(m,false))}
+                  </div>
+                )}
+                {expired.length>0&&(
+                  <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden",background:C.card}}>
+                    <div style={{padding:"10px 16px",borderBottom:`1px solid ${C.border}`,background:C.card2,fontSize:11,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em",color:C.text3}}>Expired · {expired.length}</div>
+                    {expired.map(m=>renderMemRow(m,true))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+          {addMembershipSportId==="__select__"&&(
+            <Modal title="Add membership — select activity" onClose={()=>setAddMembershipSportId(null)}>
+              <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                {sports.map(sp=>{
+                  const kid=kids.find(k=>k.key===sp.kidKey);
+                  return(
+                    <div key={sp.id} onClick={()=>setAddMembershipSportId(sp.id)} style={{display:"flex",alignItems:"center",gap:10,padding:"11px 14px",border:`1px solid ${C.border}`,borderRadius:8,cursor:"pointer",background:C.card2}}
+                      onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent}
+                      onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
+                      <span style={{fontSize:13,fontWeight:500,flex:1,color:C.text}}>{sp.name}</span>
+                      {kid&&<KidPill kid={kid} small/>}
+                    </div>
+                  );
+                })}
+              </div>
+            </Modal>
+          )}
+          {(editMembership||(addMembershipSportId&&addMembershipSportId!=="__select__"))&&(
+            <MembershipModal membership={editMembership} onSave={m=>saveMembership(editMembership?editMembership.sportId:addMembershipSportId,m)} onClose={()=>{setEditMembership(null);setAddMembershipSportId(null);}}/>
+          )}
+        </div>
+      )}
+
       {(addSport||editSport)&&<SportModal sport={editSport} sportOptions={sportOptions} onSave={saveSport} onClose={()=>{setAddSport(false);setEditSport(null);}}/>}
       {addSession&&<SessionModal onSave={sess=>saveSession(addSession.sportId,sess)} onClose={()=>setAddSession(null)}/>}
       {editSession&&<SessionModal session={editSession.session} onSave={sess=>saveSession(editSession.sportId,sess)} onClose={()=>setEditSession(null)}/>}
