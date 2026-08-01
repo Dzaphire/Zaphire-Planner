@@ -201,27 +201,26 @@ function KidAvatar({kid,size=32}){
 function SportPill({name,small}){const c=getSC(name);return <span style={{background:c.bg,color:c.txt,border:`1px solid ${c.border}`,borderRadius:5,padding:small?"1px 7px":"3px 9px",fontSize:small?11:12,fontWeight:500,whiteSpace:"nowrap"}}>{name}</span>;}
 function ResultsTable({rows,showSport}){
   if(!rows.length)return null;
-  const cols=showSport?"1fr 100px 90px 90px":"1fr 90px 90px";
+  const cols=showSport?"minmax(140px,200px) 90px 70px 60px minmax(0,1fr)":"minmax(160px,220px) 80px 60px minmax(0,1fr)";
   return(
     <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:"hidden"}}>
-      <div style={{display:"grid",gridTemplateColumns:cols,padding:"7px 12px",background:C.card2,fontSize:11,color:C.text3,fontWeight:600}}>
+      <div style={{display:"grid",gridTemplateColumns:cols,padding:"7px 12px",gap:10,background:C.card2,fontSize:11,color:C.text3,fontWeight:600}}>
         <div>Event / meet</div>
         {showSport&&<div>Sport</div>}
         <div>Time</div>
         <div>Place</div>
+        <div>Notes</div>
       </div>
       {rows.map((r,i)=>(
-        <div key={i} style={{display:"grid",gridTemplateColumns:cols,padding:"9px 12px",borderTop:`1px solid ${C.border}`,background:i%2===0?C.card:C.card2,fontSize:12,alignItems:"center"}}>
+        <div key={i} style={{display:"grid",gridTemplateColumns:cols,padding:"9px 12px",gap:10,borderTop:`1px solid ${C.border}`,background:i%2===0?C.card:C.card2,fontSize:12,alignItems:"center"}}>
           <div>
             <div style={{color:C.text,fontWeight:500}}>{r.event}</div>
             <div style={{color:C.text3,fontSize:11,marginTop:1}}>{r.meet}{r.date?` · ${r.date}`:""}</div>
           </div>
           {showSport&&<div>{r.sportName&&<SportPill name={r.sportName} small/>}</div>}
           <div style={{color:C.text}}>{r.time}</div>
-          <div>
-            <div style={{color:"#38BDF8",fontWeight:600}}>{r.place}</div>
-            {r.notes&&<div style={{fontSize:10,color:C.text3,marginTop:1}}>{r.notes}</div>}
-          </div>
+          <div style={{color:"#38BDF8",fontWeight:600}}>{r.place}</div>
+          <div style={{color:C.text3,fontSize:11,lineHeight:1.4}}>{r.notes||""}</div>
         </div>
       ))}
     </div>
