@@ -484,6 +484,7 @@ function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClic
             <button onClick={()=>setCurDate(new Date(yr,mo-1,1))} style={{padding:"5px 11px",borderRadius:7,border:`1px solid ${C.border}`,background:C.card2,cursor:"pointer",fontSize:14,color:C.text}}>‹</button>
             <span style={{fontWeight:600,fontSize:15,color:C.text}}>{MONTHS[mo]} {yr}</span>
             <button onClick={()=>setCurDate(new Date(yr,mo+1,1))} style={{padding:"5px 11px",borderRadius:7,border:`1px solid ${C.border}`,background:C.card2,cursor:"pointer",fontSize:14,color:C.text}}>›</button>
+            <button onClick={()=>{setCurDate(new Date());setViewMode("month");}} style={{padding:"5px 12px",borderRadius:7,border:`1px solid ${C.border}`,background:C.card2,color:C.accent,cursor:"pointer",fontSize:12,fontWeight:500,marginLeft:4}}>Today</button>
           </div>
           <VToggle/>
         </div>
@@ -502,7 +503,7 @@ function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClic
               return(
                 <div key={i} style={{background:isToday?"#0F1D35":C.card,borderRight:borderR,borderTop:`1px solid ${C.border}`,padding:"4px",overflow:"hidden"}}>
                   <div onClick={()=>{setCurDate(new Date(yr,mo,d));setViewMode("day");}} style={{fontSize:12,fontWeight:isToday?700:400,display:"inline-flex",alignItems:"center",justifyContent:"center",width:22,height:22,borderRadius:"50%",background:isToday?C.accent:"transparent",color:isToday?"#fff":C.text3,marginBottom:2,cursor:"pointer"}}>{d}</div>
-                  {evs.slice(0,3).map((e,ei)=><div key={ei} onClick={()=>onEventClick(e)} title={e.label} style={{background:e.bg,color:e.color,border:`1px solid ${e.border}`,borderRadius:4,padding:"1px 4px",fontSize:10,fontWeight:500,marginBottom:2,cursor:"pointer",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",opacity:e.notAttending?0.4:1}}>{icon(e.type)} {e.label}</div>)}
+                  {evs.slice(0,3).map((e,ei)=>{const ek=kids.find(k=>k.key===e.kidKey);return(<div key={ei} onClick={()=>onEventClick(e)} title={`${e.label}${ek?" · "+ek.name:""}`} style={{background:e.bg,color:e.color,border:`1px solid ${e.border}`,borderRadius:4,padding:"1px 4px",fontSize:10,fontWeight:500,marginBottom:2,cursor:"pointer",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",opacity:e.notAttending?0.4:1}}>{icon(e.type)} {e.label}{ek&&<span style={{opacity:0.75}}> · {ek.name}</span>}</div>);})}
                   {evs.length>3&&<div style={{fontSize:9,color:C.text3,cursor:"pointer"}} onClick={()=>{setCurDate(new Date(yr,mo,d));setViewMode("day");}}>+{evs.length-3} more</div>}
                 </div>
               );
@@ -522,6 +523,7 @@ function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClic
             <button onClick={()=>{const d=new Date(curDate);d.setDate(d.getDate()-7);setCurDate(d);}} style={{padding:"5px 11px",borderRadius:7,border:`1px solid ${C.border}`,background:C.card2,cursor:"pointer",fontSize:14,color:C.text}}>‹</button>
             <span style={{fontWeight:600,fontSize:14,color:C.text}}>{wds[0].toLocaleDateString("en-US",{month:"short",day:"numeric"})} – {wds[6].toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</span>
             <button onClick={()=>{const d=new Date(curDate);d.setDate(d.getDate()+7);setCurDate(d);}} style={{padding:"5px 11px",borderRadius:7,border:`1px solid ${C.border}`,background:C.card2,cursor:"pointer",fontSize:14,color:C.text}}>›</button>
+            <button onClick={()=>{setCurDate(new Date());setViewMode("week");}} style={{padding:"5px 12px",borderRadius:7,border:`1px solid ${C.border}`,background:C.card2,color:C.accent,cursor:"pointer",fontSize:12,fontWeight:500,marginLeft:4}}>Today</button>
           </div>
           <VToggle/>
         </div>
@@ -533,7 +535,7 @@ function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClic
                 <div onClick={()=>{setCurDate(wd);setViewMode("day");}} style={{fontSize:11,fontWeight:600,color:isToday?"#fff":C.text2,marginBottom:4,cursor:"pointer",display:"inline-flex",flexDirection:"column",alignItems:"center",background:isToday?C.accent:"transparent",borderRadius:6,padding:isToday?"2px 6px":"0"}}>
                   <span style={{fontSize:10}}>{DAYS[i]}</span><span style={{fontSize:14}}>{wd.getDate()}</span>
                 </div>
-                {evs.map((e,ei)=><div key={ei} onClick={()=>onEventClick(e)} style={{background:e.bg,color:e.color,border:`1px solid ${e.border}`,borderRadius:4,padding:"3px 5px",fontSize:10,fontWeight:500,marginBottom:2,cursor:"pointer",lineHeight:1.3}}>{icon(e.type)} {e.label}</div>)}
+                {evs.map((e,ei)=>{const ek=kids.find(k=>k.key===e.kidKey);return(<div key={ei} onClick={()=>onEventClick(e)} style={{background:e.bg,color:e.color,border:`1px solid ${e.border}`,borderRadius:4,padding:"3px 5px",fontSize:10,fontWeight:500,marginBottom:2,cursor:"pointer",lineHeight:1.3}}>{icon(e.type)} {e.label}{ek&&<span style={{opacity:0.75}}> · {ek.name}</span>}</div>);})}
               </div>
             );
           })}
@@ -562,6 +564,7 @@ function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClic
           <button onClick={()=>{const d=new Date(curDate);d.setDate(d.getDate()-1);setCurDate(d);setSelEv(null);}} style={{padding:"5px 11px",borderRadius:7,border:`1px solid ${C.border}`,background:C.card2,cursor:"pointer",fontSize:14,color:C.text}}>‹</button>
           <span style={{fontWeight:600,fontSize:15,color:isToday?C.accent:C.text}}>{curDate.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"})}{isToday?" — Today":""}</span>
           <button onClick={()=>{const d=new Date(curDate);d.setDate(d.getDate()+1);setCurDate(d);setSelEv(null);}} style={{padding:"5px 11px",borderRadius:7,border:`1px solid ${C.border}`,background:C.card2,cursor:"pointer",fontSize:14,color:C.text}}>›</button>
+          <button onClick={()=>{setCurDate(new Date());setSelEv(null);}} style={{padding:"5px 12px",borderRadius:7,border:`1px solid ${C.border}`,background:C.card2,color:C.accent,cursor:"pointer",fontSize:12,fontWeight:500,marginLeft:4}}>Today</button>
         </div>
         <VToggle/>
       </div>
@@ -1697,11 +1700,12 @@ function ActivitiesPage({sports,setSports,conflicts,setConflicts,summerData,sett
                             :"No schedule set";
                           return(
                             <div key={sp.id} onClick={()=>{setSelectedSportId(sp.id);setDetailTab("overview");}}
-                              style={{flex:"1 1 200px",padding:"10px 16px",borderRight:gi<group.length-1?`1px solid ${C.border}`:"none",display:"flex",alignItems:"center",gap:10,cursor:"pointer",minWidth:0}}
-                              onMouseEnter={e=>e.currentTarget.style.background=sc.bg}
-                              onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                              style={{flex:"1 1 200px",padding:"10px 16px",borderRight:gi<group.length-1?`1px solid ${C.border}`:"none",display:"flex",alignItems:"center",gap:10,cursor:"pointer",minWidth:0,position:"relative"}}
+                              onMouseEnter={e=>{e.currentTarget.style.background=sc.bg;const btn=e.currentTarget.querySelector(".del-btn");if(btn)btn.style.opacity="1";}}
+                              onMouseLeave={e=>{e.currentTarget.style.background="transparent";const btn=e.currentTarget.querySelector(".del-btn");if(btn)btn.style.opacity="0";}}>
                               {kid&&<KidPill kid={kid} small/>}
-                              <span style={{fontSize:11,color:C.text2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{scheduleLabel}</span>
+                              <span style={{fontSize:11,color:C.text2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{scheduleLabel}</span>
+                              <button className="del-btn" onClick={e=>{e.stopPropagation();if(window.confirm(`Remove ${sp.name} for ${kid?.name||"this kid"}? This cannot be undone.`))deleteSport(sp.id);}} style={{opacity:0,transition:"opacity 0.15s",background:"rgba(127,29,29,0.6)",border:"none",borderRadius:6,padding:"3px 8px",cursor:"pointer",fontSize:10,color:"#FCA5A5",fontWeight:500,flexShrink:0}}>Remove</button>
                             </div>
                           );
                         })}
