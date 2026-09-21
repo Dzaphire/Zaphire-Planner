@@ -1772,22 +1772,60 @@ function SummerEditModal({editing,schedule,weeks,providers,onSave,onClose}){
   );
 }
 
-function SummerAddYearModal({years,kids,onSave,onClose}){
-  const [y,setY]=useState(Math.max(...years)+1);
-  const [nw,setNw]=useState(8);
+function SummerWeekModal({ew,onSave,onClose}){
+  const [label,setLabel]=useState(ew.label);
+  const [dates,setDates]=useState(ew.dates==="TBD"?"":ew.dates);
+  return(
+    <Modal title={`Edit ${ew.label}`} onClose={onClose}>
+      <F label="Week label (e.g. Week 1)"><Inp value={label} onChange={setLabel}/></F>
+      <F label="Dates (e.g. Jun 23 – Jun 27)"><Inp value={dates} onChange={setDates} placeholder="Jun 23 – Jun 27"/></F>
+      <div style={{display:"flex",gap:10,marginTop:10}}>
+        <Btn onClick={onClose} variant="secondary">Cancel</Btn>
+        <Btn onClick={()=>onSave(ew.wi,label,dates||"TBD")}>Save</Btn>
+      </div>
+    </Modal>
+  );
+}
+function SummerAddYearModal({years,yearData,kids,onSave,onClose}){
+  const prevYear=Math.max(...years);
+  const prevData=yearData[prevYear];
+  const [y,setY]=useState(prevYear+1);
+  const [copyPrev,setCopyPrev]=useState(true);
+  const [nw,setNw]=useState(prevData?.weeks?.length||8);
   function create(){
-    const wks=Array.from({length:nw},(_,i)=>({n:i+1,label:`Week ${i+1}`,dates:`Week ${i+1}`}));
-    const sched={};
-    kids.forEach(k=>{sched[k.key]=Array(nw).fill(null).map(()=>({a:"Unscheduled",note:"",cost:""}));});
+    let wks,sched;
+    if(copyPrev&&prevData){
+      // carry over week count and schedule from previous year; clear out dates so user sets new ones
+      wks=prevData.weeks.map(w=>({...w,dates:`TBD`}));
+      sched={};
+      kids.forEach(k=>{
+        const prev=prevData.schedule[k.key]||[];
+        sched[k.key]=prev.map(entry=>({...entry}));
+      });
+    } else {
+      wks=Array.from({length:nw},(_,i)=>({n:i+1,label:`Week ${i+1}`,dates:`TBD`}));
+      sched={};
+      kids.forEach(k=>{sched[k.key]=Array(nw).fill(null).map(()=>({a:"Unscheduled",note:"",cost:""}));});
+    }
     onSave(y,{schedule:sched,providers:JSON.parse(JSON.stringify(DEF_PROVIDERS)),weeks:wks,notes:""});
   }
   return(
-    <Modal title="Add new summer year" onClose={onClose}>
+    <Modal title={`Add summer ${y}`} onClose={onClose}>
       <F label="Year"><Inp type="number" value={y} onChange={v=>setY(Number(v))}/></F>
-      <F label="Weeks"><Inp type="number" value={nw} onChange={v=>setNw(Number(v))}/></F>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,padding:"10px 14px",background:copyPrev?"#052E16":C.card2,border:`1px solid ${copyPrev?"#14532D":C.border}`,borderRadius:8,cursor:"pointer"}} onClick={()=>setCopyPrev(!copyPrev)}>
+        <div style={{width:18,height:18,borderRadius:4,border:`2px solid ${copyPrev?"#4ADE80":C.border}`,background:copyPrev?"#4ADE80":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+          {copyPrev&&<span style={{color:"#000",fontSize:12,fontWeight:700}}>✓</span>}
+        </div>
+        <div>
+          <div style={{fontSize:13,fontWeight:500,color:C.text}}>Copy {prevYear} schedule</div>
+          <div style={{fontSize:11,color:C.text2}}>All programs and assignments carry over — you can then edit anything that changed</div>
+        </div>
+      </div>
+      {!copyPrev&&<F label="Number of weeks"><Inp type="number" value={nw} onChange={v=>setNw(Number(v))}/></F>}
+      <div style={{fontSize:12,color:C.text3,marginBottom:10}}>📅 Week dates will be set to TBD — edit them in the schedule after creating.</div>
       <div style={{display:"flex",gap:10,marginTop:10}}>
         <Btn onClick={onClose} variant="secondary">Cancel</Btn>
-        <Btn onClick={create}>Create {y}</Btn>
+        <Btn onClick={create}>Create {y} →</Btn>
       </div>
     </Modal>
   );
@@ -1796,6 +1834,7 @@ function SummerAddYearModal({years,kids,onSave,onClose}){
 function SummerSection({yearData,years,activeYear,setActiveYear,onYearDataChange,kids,getYearData}){
   const [tab,setTab]=useState("dashboard");
   const [editing,setEditing]=useState(null);
+  const [editingWeek,setEditingWeek]=useState(null);
   const [showYearMenu,setShowYearMenu]=useState(false);
   const [addingYear,setAddingYear]=useState(false);
   const [expandedSess,setExpandedSess]=useState(null);
@@ -1804,6 +1843,12 @@ function SummerSection({yearData,years,activeYear,setActiveYear,onYearDataChange
   const {schedule,providers,weeks}=cur;
   const isHist=activeYear<new Date().getFullYear();
   function updateCur(patch){onYearDataChange(activeYear,{...cur,...patch});}
+  function saveWeek(wi,label,dates){
+    const freshCur=(getYearData?getYearData(activeYear):yearData[activeYear])||{schedule:DEF_SCHED,providers:DEF_PROVIDERS,weeks:DEF_WEEKS,notes:""};
+    const newWeeks=freshCur.weeks.map((w,i)=>i===wi?{...w,label,dates}:w);
+    onYearDataChange(activeYear,{...freshCur,weeks:newWeeks});
+    setEditingWeek(null);
+  }
   function saveEntry({a,note,cost},ed,sched){
     const e=ed||editing;
     if(!e)return;
@@ -1836,7 +1881,11 @@ function SummerSection({yearData,years,activeYear,setActiveYear,onYearDataChange
           <div style={{display:"flex",flexDirection:"column",flex:1,gap:4}}>
             {weeks.map((wk,wi)=>(
               <div key={wi} style={{display:"grid",gridTemplateColumns:"100px repeat(4,1fr)",gap:4,flex:1,minHeight:0}}>
-                <div style={{background:C.card3,borderRadius:8,padding:"6px 8px",border:`1px solid ${C.border}`,display:"flex",flexDirection:"column",justifyContent:"center"}}><div style={{fontWeight:600,fontSize:12,color:C.text}}>{wk.label}</div><div style={{fontSize:10,color:C.text3}}>{wk.dates}</div></div>
+                <div onClick={()=>!isHist&&setEditingWeek({wi,label:wk.label,dates:wk.dates})} style={{background:C.card3,borderRadius:8,padding:"6px 8px",border:`1px solid ${wk.dates==="TBD"?"#78350F":C.border}`,display:"flex",flexDirection:"column",justifyContent:"center",cursor:isHist?"default":"pointer",position:"relative"}} title={isHist?"":wk.dates==="TBD"?"Click to set dates":"Click to edit week"}>
+                  <div style={{fontWeight:600,fontSize:12,color:C.text}}>{wk.label}</div>
+                  <div style={{fontSize:10,color:wk.dates==="TBD"?"#F59E0B":C.text3}}>{wk.dates}</div>
+                  {!isHist&&<div style={{position:"absolute",top:3,right:5,fontSize:9,color:C.text3,opacity:0.5}}>✏️</div>}
+                </div>
                 {kids.map(k=>{const s=(schedule[k.key]&&schedule[k.key][wi])||{a:"Unscheduled",note:"",cost:""};const c=getTC(s.a);return(
                   <div key={k.key} onClick={()=>!isHist&&setEditing({kidKey:k.key,weekIdx:wi,kid:k})} style={{background:c.bg,border:`1px solid ${c.border}`,borderRadius:8,padding:"8px 10px",cursor:isHist?"default":"pointer",display:"flex",flexDirection:"column",justifyContent:"center"}} onMouseEnter={e=>{if(!isHist)e.currentTarget.style.opacity="0.75";}} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
                     <div style={{fontWeight:600,fontSize:12,color:c.txt}}>{s.a}</div>
@@ -1871,34 +1920,111 @@ function SummerSection({yearData,years,activeYear,setActiveYear,onYearDataChange
         </div>
       )}
       {tab==="programs"&&(
-        <div>{providers.map(prov=>{const c=getTC(prov.name)||{bg:C.card2,txt:C.text2,border:C.border};return(
-          <div key={prov.id} style={{marginBottom:12,background:C.card,border:`1px solid ${c.border}`,borderLeft:`4px solid ${c.txt}`,borderRadius:12,overflow:"hidden"}}>
-            <div style={{padding:"12px 16px",background:c.bg}}><div style={{display:"flex",alignItems:"center",gap:10,marginBottom:3}}><span style={{fontWeight:600,fontSize:14,color:c.txt}}>{prov.name}</span>{prov.url&&<a href={prov.url} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:c.txt,background:"rgba(0,0,0,0.3)",padding:"2px 8px",borderRadius:5,textDecoration:"none"}}>Site ↗</a>}</div><div style={{fontSize:12,color:"#94A3B8"}}>{prov.hours} · {prov.location}</div>{prov.notes&&<div style={{fontSize:11,color:"#64748B",marginTop:2}}>{prov.notes}</div>}</div>
-            {prov.sessions.map((sess,si)=>{const key=`${prov.id}-${si}`;const exp=expandedSess===key;const eligible=kids.filter(k=>{const age=ageAsOf(k.dob,`${activeYear}-06-22`);return age>=sess.ageMin&&age<=sess.ageMax;});return(
-              <div key={si} style={{borderTop:`1px solid ${C.border}`}}>
-                <div onClick={()=>setExpandedSess(exp?null:key)} style={{display:"grid",gridTemplateColumns:"1fr auto auto",alignItems:"center",gap:10,padding:"10px 16px",cursor:"pointer",background:exp?C.card2:C.card}}>
-                  <div><div style={{fontWeight:500,fontSize:13,color:C.text}}>{sess.name}</div><div style={{fontSize:11,color:C.text2}}>{sess.dates}</div></div>
-                  <span style={{fontSize:11,background:"#0A2010",color:"#4ADE80",padding:"2px 8px",borderRadius:5}}>Ages {sess.ageMin}–{sess.ageMax}</span>
-                  <div style={{textAlign:"right",fontSize:13,fontWeight:600,color:"#4ADE80"}}>{sess.cost?`$${sess.cost}`:"—"}<br/><span style={{fontSize:10,fontWeight:400,color:C.text3}}>{sess.costNote}</span></div>
-                </div>
-                {exp&&<div style={{padding:"0 16px 14px",background:C.card2,borderTop:`1px solid ${C.border}`}}><p style={{fontSize:13,color:C.text2,lineHeight:1.6,marginBottom:10}}>{sess.description}</p><div style={{display:"flex",gap:7,flexWrap:"wrap",alignItems:"center"}}><span style={{fontSize:12,color:C.text2,fontWeight:500}}>Eligible:</span>{eligible.length?eligible.map(k=><span key={k.key} style={{background:k.bg,color:k.color,borderRadius:5,padding:"2px 9px",fontSize:12,fontWeight:500}}>{k.name} (age {ageAsOf(k.dob,`${activeYear}-06-22`)})</span>):<span style={{fontSize:12,color:C.text3}}>None in age range</span>}</div>{prov.url&&<a href={prov.url} target="_blank" rel="noopener noreferrer" style={{display:"inline-block",marginTop:10,fontSize:12,color:C.accent,fontWeight:500}}>Register on {prov.name} →</a>}</div>}
-              </div>
-            );})}
-          </div>
-        );})}
-        </div>
-      )}
-      {tab==="costs"&&activeYear===2026&&(
         <div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:10,marginBottom:18}}>
-            {[{l:"Shay",k:"shay",t:5176.50},{l:"Christian",k:"christian",t:4528},{l:"Aurora",k:"aurora",t:4608}].map(item=>{const kid=kids.find(k=>k.key===item.k);return(<div key={item.l} style={{background:kid?kid.bg:C.card2,borderRadius:12,padding:"14px 16px",border:`1px solid ${kid?kid.color+"44":C.border}`}}><div style={{fontSize:12,color:kid?kid.color:C.text2,marginBottom:4}}>{item.l}</div><div style={{fontSize:20,fontWeight:700,color:C.text}}>{fmtMoney(item.t)}</div></div>);})}
-            <div style={{background:"#1E1B4B",borderRadius:12,padding:"14px 16px",border:"1px solid #4338CA"}}><div style={{fontSize:12,color:"#A5B4FC",marginBottom:4}}>Total</div><div style={{fontSize:20,fontWeight:700,color:"#fff"}}>{fmtMoney(14312.50)}</div></div>
-          </div>
+          <div style={{fontSize:12,color:C.text3,marginBottom:14,padding:"8px 12px",background:C.card2,borderRadius:8,border:`1px solid ${C.border}`}}>📋 This view shows what {activeYear} looks like for each program. Click a week row in the Schedule tab to assign a kid to a program and enter the cost.</div>
+          {providers.map(prov=>{
+            const c=getTC(prov.name)||{bg:C.card2,txt:C.text2,border:C.border};
+            // Build enrollment: for each kid, which weeks are they at this provider, and what did they pay?
+            const enrollment=kids.map(k=>{
+              const kidWeeks=(schedule[k.key]||[]).map((s,wi)=>({...s,wi,wk:weeks[wi]})).filter(s=>s.a===prov.name);
+              const total=kidWeeks.reduce((sum,s)=>{const n=parseFloat((s.cost||"").replace(/[^0-9.]/g,""));return sum+(isNaN(n)?0:n);},0);
+              return{kid:k,weeks:kidWeeks,total};
+            }).filter(e=>e.weeks.length>0);
+            return(
+              <div key={prov.id} style={{marginBottom:14,background:C.card,border:`1px solid ${c.border}`,borderLeft:`4px solid ${c.txt}`,borderRadius:12,overflow:"hidden"}}>
+                <div style={{padding:"12px 16px",background:c.bg,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                  <div>
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:3}}><span style={{fontWeight:600,fontSize:14,color:c.txt}}>{prov.name}</span>{prov.url&&<a href={prov.url} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:c.txt,background:"rgba(0,0,0,0.3)",padding:"2px 8px",borderRadius:5,textDecoration:"none"}}>Site ↗</a>}</div>
+                    {prov.location&&<div style={{fontSize:11,color:"#94A3B8"}}>{prov.hours}{prov.hours&&prov.location?" · ":""}{prov.location}</div>}
+                    {prov.notes&&<div style={{fontSize:11,color:"#64748B",marginTop:2}}>{prov.notes}</div>}
+                  </div>
+                  <div style={{textAlign:"right",flexShrink:0}}>
+                    <div style={{fontSize:11,color:c.txt,opacity:0.8}}>{enrollment.length} kid{enrollment.length!==1?"s":""} enrolled</div>
+                    {enrollment.length>0&&<div style={{fontSize:13,fontWeight:600,color:"#4ADE80"}}>{fmtMoney(enrollment.reduce((s,e)=>s+e.total,0))}</div>}
+                  </div>
+                </div>
+                {enrollment.length===0?(
+                  <div style={{padding:"12px 16px",fontSize:12,color:C.text3,fontStyle:"italic"}}>No kids assigned to {prov.name} in {activeYear}. Go to the Schedule tab to assign weeks.</div>
+                ):(
+                  enrollment.map(e=>(
+                    <div key={e.kid.key} style={{borderTop:`1px solid ${C.border}`,padding:"10px 16px"}}>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8}}>
+                          <span style={{background:e.kid.bg,color:e.kid.color,borderRadius:5,padding:"2px 9px",fontSize:12,fontWeight:600}}>{e.kid.name}</span>
+                          <span style={{fontSize:11,color:C.text3}}>Age {ageAsOf(e.kid.dob,`${activeYear}-06-22`)}</span>
+                        </div>
+                        <div style={{fontSize:13,fontWeight:600,color:"#4ADE80"}}>{e.total>0?fmtMoney(e.total):"no cost entered"}</div>
+                      </div>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                        {e.weeks.map(s=>(
+                          <div key={s.wi} onClick={()=>!isHist&&setEditing({kidKey:e.kid.key,weekIdx:s.wi,kid:e.kid})} style={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:6,padding:"4px 9px",fontSize:11,cursor:isHist?"default":"pointer",color:C.text}}>
+                            <span style={{fontWeight:500}}>{s.wk?.label||`Wk ${s.wi+1}`}</span>
+                            {s.wk?.dates&&<span style={{color:C.text3}}> · {s.wk.dates}</span>}
+                            {s.cost&&<span style={{color:"#4ADE80",marginLeft:4}}>{s.cost}</span>}
+                            {s.note&&<span style={{color:C.text3,marginLeft:4}}>— {s.note}</span>}
+                            {!isHist&&<span style={{color:C.text3,marginLeft:4,opacity:0.5}}>✏️</span>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
-      {tab==="costs"&&activeYear!==2026&&<div style={{textAlign:"center",padding:"40px 20px",color:C.text3,fontSize:13}}>Add costs via the schedule for {activeYear}.</div>}
+      {tab==="costs"&&(()=>{
+        // Calculate totals dynamically from schedule data for any year
+        const kidTotals=kids.map(k=>{
+          const entries=schedule[k.key]||[];
+          const total=entries.reduce((sum,s)=>{if(!s)return sum;const n=parseFloat((s.cost||"").replace(/[^0-9.]/g,""));return sum+(isNaN(n)?0:n);},0);
+          const breakdown=entries.map((s,wi)=>{
+            if(!s||!s.cost)return null;
+            const n=parseFloat(s.cost.replace(/[^0-9.]/g,""));
+            if(isNaN(n)||n===0)return null;
+            return{wi,wk:weeks[wi],a:s.a,cost:s.cost,n};
+          }).filter(Boolean);
+          return{kid:k,total,breakdown};
+        });
+        const grandTotal=kidTotals.reduce((s,kt)=>s+kt.total,0);
+        const hasCosts=kidTotals.some(kt=>kt.total>0);
+        return(
+          <div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:10,marginBottom:18}}>
+              {kidTotals.map(kt=>{const kid=kt.kid;return(
+                <div key={kid.key} style={{background:kid.bg,borderRadius:12,padding:"14px 16px",border:`1px solid ${kid.color}44`}}>
+                  <div style={{fontSize:12,color:kid.color,marginBottom:4}}>{kid.name}</div>
+                  <div style={{fontSize:20,fontWeight:700,color:C.text}}>{kt.total>0?fmtMoney(kt.total):"—"}</div>
+                </div>
+              );})}
+              <div style={{background:"#1E1B4B",borderRadius:12,padding:"14px 16px",border:"1px solid #4338CA"}}>
+                <div style={{fontSize:12,color:"#A5B4FC",marginBottom:4}}>Total</div>
+                <div style={{fontSize:20,fontWeight:700,color:"#fff"}}>{grandTotal>0?fmtMoney(grandTotal):"—"}</div>
+              </div>
+            </div>
+            {!hasCosts&&<div style={{textAlign:"center",padding:"20px",color:C.text3,fontSize:12,background:C.card2,borderRadius:10,border:`1px solid ${C.border}`}}>No costs entered yet for {activeYear}. Go to the Schedule tab and click any week row to enter a cost.</div>}
+            {hasCosts&&kidTotals.filter(kt=>kt.breakdown.length>0).map(kt=>(
+              <div key={kt.kid.key} style={{marginBottom:14,background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden"}}>
+                <div style={{padding:"10px 16px",background:kt.kid.bg,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <span style={{fontWeight:600,fontSize:14,color:kt.kid.color}}>{kt.kid.name}</span>
+                  <span style={{fontWeight:700,fontSize:14,color:"#4ADE80"}}>{fmtMoney(kt.total)}</span>
+                </div>
+                {kt.breakdown.map((b,bi)=>(
+                  <div key={bi} onClick={()=>!isHist&&setEditing({kidKey:kt.kid.key,weekIdx:b.wi,kid:kt.kid})} style={{display:"grid",gridTemplateColumns:"100px 2fr 1fr",gap:12,padding:"9px 16px",background:bi%2===0?C.card:C.card2,borderBottom:bi<kt.breakdown.length-1?`1px solid ${C.border}`:"none",cursor:isHist?"default":"pointer",alignItems:"center"}}>
+                    <div style={{fontSize:11,fontWeight:500,color:C.text}}>{b.wk?.label||`Week ${b.wi+1}`}<br/><span style={{color:C.text3,fontWeight:400}}>{b.wk?.dates||""}</span></div>
+                    <div style={{fontSize:12,color:C.text2}}>{b.a}</div>
+                    <div style={{fontSize:13,fontWeight:600,color:"#4ADE80",textAlign:"right"}}>{b.cost}</div>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        );
+      })()}
       {editing&&<SummerEditModal editing={editing} schedule={schedule} weeks={weeks} providers={providers} onSave={vals=>saveEntry(vals,editing,schedule)} onClose={()=>setEditing(null)}/>}
-      {addingYear&&<SummerAddYearModal years={years} kids={kids} onSave={(y,data)=>{onYearDataChange(y,data);setAddingYear(false);}} onClose={()=>setAddingYear(false)}/>}
+      {addingYear&&<SummerAddYearModal years={years} yearData={yearData} kids={kids} onSave={(y,data)=>{onYearDataChange(y,data);setActiveYear(y);setAddingYear(false);}} onClose={()=>setAddingYear(false)}/>}
+      {editingWeek&&<SummerWeekModal ew={editingWeek} onSave={saveWeek} onClose={()=>setEditingWeek(null)}/>}
     </div>
   );
 }
