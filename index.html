@@ -411,9 +411,10 @@ function KidEditModal({kid,onSave,onClose}){
 function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClick,kids}){
   const today=new Date();
   const [viewMode,setViewMode]=useState("month");
-  const [curDate,setCurDate]=useState(new Date(2026,5,1));
+  const [curDate,setCurDate]=useState(new Date());
   const [selEv,setSelEv]=useState(null);
 
+  // ── Build events array (identical logic to original) ──
   const events=[];
   if(showEC){
     sports.forEach(sp=>{
@@ -453,7 +454,6 @@ function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClic
     });
   }
 
-  // parse "4:00 PM" → fractional hour (16.0)
   function parseEvHour(str){
     if(!str)return null;
     const m=String(str).match(/([0-9]+):([0-9]+)\s*(AM|PM)/i);
@@ -470,49 +470,184 @@ function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClic
   }
   const evOn=d=>[...events.filter(ev=>ev.date===d)].sort((a,b)=>evSortTime(a)-evSortTime(b));
   const icon=t=>t==="meet"?"★":t==="practice"?"▸":"☀";
+  function fmtHour(h){const ap=h>=12?"PM":"AM";const h12=h===0?12:h>12?h-12:h;return `${h12}:00 ${ap}`;}
 
   function VToggle(){return <div style={{display:"flex",gap:4}}>{["day","week","month"].map(v=><button key={v} onClick={()=>{setViewMode(v);setSelEv(null);}} style={{padding:"5px 12px",borderRadius:7,border:`1px solid ${viewMode===v?C.accent:C.border}`,background:viewMode===v?C.accent:C.card2,color:viewMode===v?"#fff":C.text2,cursor:"pointer",fontSize:12,textTransform:"capitalize"}}>{v}</button>)}</div>;}
 
-  if(viewMode==="month"){
-    const yr=curDate.getFullYear(),mo=curDate.getMonth();
+  // ── Mini calendar for right panel ──
+  function MiniCal({yr,mo,selectedDate,onDayClick}){
     const first=new Date(yr,mo,1).getDay(),dim=new Date(yr,mo+1,0).getDate();
     const cells=[];for(let i=0;i<first;i++)cells.push(null);for(let d=1;d<=dim;d++)cells.push(d);
+    const monthName=MONTHS[mo];
     return(
-      <div style={{display:"flex",flexDirection:"column",height:"calc(100vh - 180px)",minHeight:500}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexShrink:0}}>
-          <div style={{display:"flex",gap:6,alignItems:"center"}}>
-            <button onClick={()=>setCurDate(new Date(yr,mo-1,1))} style={{padding:"5px 11px",borderRadius:7,border:`1px solid ${C.border}`,background:C.card2,cursor:"pointer",fontSize:14,color:C.text}}>‹</button>
-            <span style={{fontWeight:600,fontSize:15,color:C.text}}>{MONTHS[mo]} {yr}</span>
-            <button onClick={()=>setCurDate(new Date(yr,mo+1,1))} style={{padding:"5px 11px",borderRadius:7,border:`1px solid ${C.border}`,background:C.card2,cursor:"pointer",fontSize:14,color:C.text}}>›</button>
-            <button onClick={()=>{setCurDate(new Date());setViewMode("month");}} style={{padding:"5px 12px",borderRadius:7,border:`1px solid ${C.border}`,background:C.card2,color:C.accent,cursor:"pointer",fontSize:12,fontWeight:500,marginLeft:4}}>Today</button>
-          </div>
-          <VToggle/>
+      <div style={{padding:"10px 12px",borderBottom:`1px solid ${C.border}`}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+          <span style={{fontSize:12,fontWeight:700,color:C.text}}>{monthName} {yr}</span>
+          {mo===curDate.getMonth()&&yr===curDate.getFullYear()&&(
+            <div style={{display:"flex",gap:3}}>
+              <button onClick={()=>setCurDate(new Date(yr,mo-1,1))} style={{width:20,height:20,borderRadius:4,border:`1px solid ${C.border}`,background:C.card3,cursor:"pointer",fontSize:11,color:C.text2,display:"flex",alignItems:"center",justifyContent:"center"}}>‹</button>
+              <button onClick={()=>setCurDate(new Date(yr,mo+1,1))} style={{width:20,height:20,borderRadius:4,border:`1px solid ${C.border}`,background:C.card3,cursor:"pointer",fontSize:11,color:C.text2,display:"flex",alignItems:"center",justifyContent:"center"}}>›</button>
+            </div>
+          )}
         </div>
-        <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:"hidden",flex:1,display:"flex",flexDirection:"column"}}>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",flexShrink:0}}>
-            {DAYS.map((d,i)=><div key={d} style={{textAlign:"center",fontSize:11,fontWeight:600,color:C.text2,padding:"8px 0",background:C.card3,borderRight:i<6?`1px solid ${C.border}`:"none"}}>{d}</div>)}
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gridAutoRows:"1fr",flex:1}}>
-            {cells.map((d,i)=>{
-              const col=i%7;
-              const borderR=col<6?`1px solid ${C.border}`:"none";
-              if(!d)return <div key={i} style={{background:"#13151F",borderRight:borderR,borderTop:`1px solid ${C.border}`,height:"100%"}}/>;
-              const ds=`${yr}-${String(mo+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
-              const evs=evOn(ds);
-              const isToday=today.getDate()===d&&today.getMonth()===mo&&today.getFullYear()===yr;
-              return(
-                <div key={i} style={{background:isToday?"#0F1D35":C.card,borderRight:borderR,borderTop:`1px solid ${C.border}`,padding:"4px",overflow:"hidden"}}>
-                  <div onClick={()=>{setCurDate(new Date(yr,mo,d));setViewMode("day");}} style={{fontSize:12,fontWeight:isToday?700:400,display:"inline-flex",alignItems:"center",justifyContent:"center",width:22,height:22,borderRadius:"50%",background:isToday?C.accent:"transparent",color:isToday?"#fff":C.text3,marginBottom:2,cursor:"pointer"}}>{d}</div>
-                  {evs.slice(0,3).map((e,ei)=>{const ek=kids.find(k=>k.key===e.kidKey);return(<div key={ei} onClick={()=>onEventClick(e)} title={`${e.label}${ek?" · "+ek.name:""}`} style={{background:e.bg,color:e.color,border:`1px solid ${e.border}`,borderRadius:4,padding:"1px 4px",fontSize:10,fontWeight:500,marginBottom:2,cursor:"pointer",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",opacity:e.notAttending?0.4:1}}>{icon(e.type)} {e.label}{ek&&<span style={{opacity:0.75}}> · {ek.name}</span>}</div>);})}
-                  {evs.length>3&&<div style={{fontSize:9,color:C.text3,cursor:"pointer"}} onClick={()=>{setCurDate(new Date(yr,mo,d));setViewMode("day");}}>+{evs.length-3} more</div>}
-                </div>
-              );
-            })}
-          </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:1}}>
+          {["S","M","T","W","T","F","S"].map((d,i)=><div key={i} style={{textAlign:"center",fontSize:8,fontWeight:600,letterSpacing:"0.05em",color:C.text3,paddingBottom:3}}>{d}</div>)}
+          {cells.map((d,i)=>{
+            if(!d)return <div key={i}/>;
+            const ds=`${yr}-${String(mo+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+            const evs=evOn(ds);
+            const isToday=today.getDate()===d&&today.getMonth()===mo&&today.getFullYear()===yr;
+            const isSelected=selectedDate&&selectedDate===ds;
+            // get a short label for the first event of the day
+            const firstEv=evs[0];
+            const shortLabel=firstEv?firstEv.label.split(" ")[0].replace(/&/g,""):null;
+            const extraCount=evs.length>1?evs.length-1:0;
+            return(
+              <div key={i} onClick={()=>onDayClick&&onDayClick(ds,d)} style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-start",paddingTop:3,minHeight:32,borderRadius:5,cursor:evs.length>0?"pointer":"default",background:isSelected?"#1E1B4B":isToday?"#0F1D35":"transparent",border:isSelected?`1px solid ${C.accent}`:isToday?`1px solid #1E3A5F`:"1px solid transparent",transition:"background 0.1s"}}>
+                <div style={{fontSize:10,fontWeight:isToday?700:evs.length>0?600:400,color:isToday?C.accent:evs.length>0?C.text:C.text3,lineHeight:1}}>{d}</div>
+                {shortLabel&&<div style={{fontSize:7,fontWeight:700,color:firstEv.color,lineHeight:1,marginTop:1,maxWidth:28,overflow:"hidden",textOverflow:"clip",whiteSpace:"nowrap",textAlign:"center"}}>{shortLabel}{extraCount>0?`+${extraCount}`:""}</div>}
+              </div>
+            );
+          })}
         </div>
       </div>
     );
   }
+
+  // ── Month view: split layout ──
+  if(viewMode==="month"){
+    const yr=curDate.getFullYear(),mo=curDate.getMonth();
+    const nextMo=mo===11?0:mo+1,nextYr=mo===11?yr+1:yr;
+
+    // Build list of all dates in this month + next that have events
+    const allDates=[];
+    const addMonthDates=(y,m)=>{
+      const dim2=new Date(y,m+1,0).getDate();
+      for(let d=1;d<=dim2;d++){
+        const ds=`${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+        const evs=evOn(ds);
+        if(evs.length>0)allDates.push({ds,d,mo:m,yr:y,evs});
+      }
+    };
+    addMonthDates(yr,mo);
+    addMonthDates(nextYr,nextMo);
+    // Also include dates with no events for current month to show structure — actually just events is cleaner
+
+    const [listSelectedDs,setListSelectedDs]=useState(null);
+    const selectedEvForDetail=listSelectedDs?evOn(listSelectedDs).find((_,i)=>i===0)||null:null;
+
+    function selectDay(ds){
+      setListSelectedDs(ds);
+      setSelEv(evOn(ds)[0]||null);
+    }
+    function selectEvRow(ev,ds){
+      setListSelectedDs(ds);
+      setSelEv(ev);
+    }
+
+    // Group allDates by month label for section headers
+    let lastMonthLabel="";
+
+    return(
+      <div style={{display:"flex",gap:0,height:"calc(100vh - 200px)",minHeight:500,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden"}}>
+        {/* LEFT: event list */}
+        <div style={{flex:1,display:"flex",flexDirection:"column",minWidth:0}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderBottom:`1px solid ${C.border}`,flexShrink:0,gap:8}}>
+            <div style={{display:"flex",gap:5,alignItems:"center"}}>
+              <button onClick={()=>setCurDate(new Date(yr,mo-1,1))} style={{padding:"4px 10px",borderRadius:6,border:`1px solid ${C.border}`,background:C.card2,cursor:"pointer",fontSize:13,color:C.text}}>‹</button>
+              <span style={{fontWeight:700,fontSize:14,color:C.text}}>{MONTHS[mo]} {yr}</span>
+              <button onClick={()=>setCurDate(new Date(yr,mo+1,1))} style={{padding:"4px 10px",borderRadius:6,border:`1px solid ${C.border}`,background:C.card2,cursor:"pointer",fontSize:13,color:C.text}}>›</button>
+              <button onClick={()=>{setCurDate(new Date());setListSelectedDs(null);setSelEv(null);}} style={{padding:"4px 10px",borderRadius:20,border:`1px solid ${C.accent}`,background:"transparent",color:C.accent,cursor:"pointer",fontSize:11,fontWeight:500}}>Today</button>
+            </div>
+            <VToggle/>
+          </div>
+          <div style={{flex:1,overflowY:"auto"}}>
+            {allDates.length===0&&(
+              <div style={{textAlign:"center",padding:"60px 20px",color:C.text3,fontSize:13}}>No events in this period.</div>
+            )}
+            {allDates.map(({ds,d,mo:evMo,yr:evYr,evs})=>{
+              const dateObj=new Date(evYr,evMo,d);
+              const isToday=dateObj.toDateString()===today.toDateString();
+              const isSelected=listSelectedDs===ds;
+              const dayName=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][dateObj.getDay()];
+              const monthLabel=`${MONTHS[evMo]} ${evYr}`;
+              const showMonthHeader=monthLabel!==lastMonthLabel;
+              if(showMonthHeader)lastMonthLabel=monthLabel;
+              return(
+                <div key={ds}>
+                  {showMonthHeader&&<div style={{fontSize:10,fontWeight:600,letterSpacing:"0.08em",textTransform:"uppercase",color:C.text3,padding:"10px 14px 4px",background:C.card2,borderBottom:`1px solid ${C.border}`,position:"sticky",top:0,zIndex:2}}>{monthLabel}</div>}
+                  <div style={{display:"flex",alignItems:"stretch",borderBottom:`1px solid ${C.border}`,background:isSelected?"#13152A":isToday?"#0A0F1E":"transparent"}}>
+                    {/* date badge */}
+                    <div onClick={()=>selectDay(ds)} style={{width:52,flexShrink:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"8px 0",cursor:"pointer",borderRight:`1px solid ${C.border}`,background:"transparent"}}>
+                      <div style={{fontSize:9,fontWeight:600,letterSpacing:"0.06em",textTransform:"uppercase",color:isToday?C.accent:C.text3}}>{dayName}</div>
+                      <div style={{fontSize:20,fontWeight:700,lineHeight:1,color:isToday?C.accent:C.text,marginTop:2}}>{d}</div>
+                    </div>
+                    {/* events for this date */}
+                    <div style={{flex:1,minWidth:0,padding:"4px 6px"}}>
+                      {evs.map((ev,ei)=>{
+                        const kid=kids.find(k=>k.key===ev.kidKey);
+                        const isEvSelected=selEv&&selEv===ev||(listSelectedDs===ds&&selEv&&selEv.label===ev.label&&selEv.date===ev.date);
+                        return(
+                          <div key={ei} onClick={()=>selectEvRow(ev,ds)}
+                            style={{display:"flex",alignItems:"center",gap:8,padding:"5px 6px",borderRadius:7,marginBottom:2,cursor:"pointer",background:isEvSelected?"#1E1B4B":"transparent",border:isEvSelected?`1px solid ${C.accent}`:"1px solid transparent",transition:"background 0.1s"}}
+                            onMouseEnter={e=>{if(!isEvSelected)e.currentTarget.style.background=C.card3;}}
+                            onMouseLeave={e=>{if(!isEvSelected)e.currentTarget.style.background="transparent";}}>
+                            <div style={{width:7,height:7,borderRadius:"50%",background:ev.color,flexShrink:0}}/>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{fontSize:12,fontWeight:600,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{icon(ev.type)} {ev.label}</div>
+                              <div style={{fontSize:10,color:C.text3,marginTop:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{ev.sub}</div>
+                            </div>
+                            {kid&&<span style={{fontSize:9,fontWeight:600,padding:"2px 6px",borderRadius:20,background:`${kid.color}22`,color:kid.color,flexShrink:0}}>{kid.name}</span>}
+                            <div style={{fontSize:10,color:C.text3,flexShrink:0,whiteSpace:"nowrap"}}>{String(ev.sub||"").split("·")[0].trim().split("–")[0].trim()}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            <div style={{height:40}}/>
+          </div>
+        </div>
+
+        {/* RIGHT: stacked mini calendars + detail */}
+        <div style={{width:300,flexShrink:0,borderLeft:`1px solid ${C.border}`,display:"flex",flexDirection:"column",overflowY:"auto",background:C.card}}>
+          <MiniCal yr={yr} mo={mo} selectedDate={listSelectedDs} onDayClick={(ds,d)=>{selectDay(ds);}}/>
+          <MiniCal yr={nextYr} mo={nextMo} selectedDate={listSelectedDs} onDayClick={(ds,d)=>{selectDay(ds);}}/>
+          {/* Detail card */}
+          {selEv&&(()=>{
+            const kid=kids.find(k=>k.key===selEv.kidKey);
+            const sport=sports.find(s=>s.id===selEv.sportId);
+            const sess=sport?.sessions.find(s=>s.id===selEv.sessionId);
+            const meet=sess?.meets.find(m=>m.id===selEv.meetId);
+            return(
+              <div style={{padding:"14px",flex:1}}>
+                <div style={{height:3,background:selEv.color,borderRadius:2,marginBottom:12}}/>
+                <div style={{fontSize:9,fontWeight:600,letterSpacing:"0.1em",textTransform:"uppercase",color:C.text3,marginBottom:4}}>
+                  {selEv.type==="practice"?"Practice":selEv.type==="meet"?"Meet / Game":"Summer"}
+                </div>
+                <div style={{fontSize:15,fontWeight:700,color:C.text,marginBottom:10,lineHeight:1.3}}>{selEv.label}</div>
+                {selEv.sub&&<div style={{display:"flex",gap:6,marginBottom:7,fontSize:12,color:C.text2}}><span style={{opacity:0.5}}>⏰</span><span>{selEv.sub}</span></div>}
+                {meet?.location&&<div style={{display:"flex",gap:6,marginBottom:7,fontSize:12,color:C.text2}}><span style={{opacity:0.5}}>📍</span><span>{meet.location}</span></div>}
+                {kid&&<div style={{marginBottom:10}}><KidPill kid={kid}/></div>}
+                {sport&&<div style={{fontSize:12,color:C.text2,marginBottom:4}}>{sport.teamName||sport.location||""}</div>}
+                {sess&&<div style={{fontSize:11,color:C.text3,marginBottom:4}}>{sess.name}</div>}
+                {selEv.type!=="summer"&&(
+                  <button onClick={()=>{const ev={...selEv};setSelEv(null);setListSelectedDs(null);onEventClick(ev);}} style={{width:"100%",marginTop:12,padding:"8px",borderRadius:8,border:`1.5px solid ${selEv.color}`,background:"transparent",cursor:"pointer",fontSize:12,fontWeight:600,color:selEv.color}}>
+                    {selEv.type==="meet"?"Edit meet →":"Open activity →"}
+                  </button>
+                )}
+              </div>
+            );
+          })()}
+          {!selEv&&<div style={{padding:"20px 14px",color:C.text3,fontSize:12,textAlign:"center",lineHeight:1.6}}>Click an event or day to see details here.</div>}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Week view (unchanged from original) ──
   if(viewMode==="week"){
     const ws=new Date(curDate);ws.setDate(ws.getDate()-ws.getDay());
     const wds=Array.from({length:7},(_,i)=>{const d=new Date(ws);d.setDate(d.getDate()+i);return d;});
@@ -543,19 +678,16 @@ function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClic
       </div>
     );
   }
-  // ── Day view — Option C: time ruler + right detail panel ──
+
+  // ── Day view (unchanged from original) ──
   const ds=`${curDate.getFullYear()}-${String(curDate.getMonth()+1).padStart(2,"0")}-${String(curDate.getDate()).padStart(2,"0")}`;
   const isToday=curDate.toDateString()===today.toDateString();
   const sortedEvs=evOn(ds);
   const PX_PER_HOUR=72;
-
-  // determine ruler range from actual event times
   const evHours=sortedEvs.map(e=>evSortTime(e)).filter(h=>h<99);
   const rulerStart=evHours.length?Math.max(0,Math.floor(Math.min(...evHours))-1):8;
   const rulerEnd=evHours.length?Math.min(24,Math.ceil(Math.max(...evHours))+2):20;
   const rulerHours=Array.from({length:rulerEnd-rulerStart},(_,i)=>rulerStart+i);
-
-  function fmtHour(h){const ap=h>=12?"PM":"AM";const h12=h===0?12:h>12?h-12:h;return `${h12}:00 ${ap}`;}
 
   return(
     <div style={{display:"flex",flexDirection:"column",height:"calc(100vh - 180px)",minHeight:500}}>
@@ -569,7 +701,6 @@ function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClic
         <VToggle/>
       </div>
       <div style={{display:"flex",flex:1,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden",minHeight:0}}>
-        {/* time ruler */}
         <div style={{flex:1,overflowY:"auto",minWidth:0}}>
           {sortedEvs.length===0?(
             <div style={{textAlign:"center",padding:"60px 20px",color:C.text3,fontSize:13}}>Nothing scheduled this day.</div>
@@ -584,7 +715,6 @@ function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClic
               {sortedEvs.map((e,i)=>{
                 const hr=evSortTime(e);
                 const topPx=hr<99?16+(hr-rulerStart)*PX_PER_HOUR:16+i*60;
-                // parse duration from sub "5:30 PM – 6:30 PM · Location"
                 let durH=1;
                 if(e.sub){
                   const parts=String(e.sub).split("–");
@@ -609,7 +739,6 @@ function CalendarView({sports,summerData,showSummer,showEC,conflicts,onEventClic
             </div>
           )}
         </div>
-        {/* right detail panel */}
         {selEv&&(()=>{
           const kid=kids.find(k=>k.key===selEv.kidKey);
           const sport=sports.find(s=>s.id===selEv.sportId);
